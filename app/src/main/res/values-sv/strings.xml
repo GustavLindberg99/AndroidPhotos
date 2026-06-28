@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Foton</string>
+    <string name="settings">Inställningar</string>
+    <string name="map">Karta</string>
+    <string name="googleDrive">Google Drive</string>
+    <string name="help">Hjälp</string>
+    <string name="feedback">Feedback</string>
+    <string name="about">Om Foton</string>
+    <string name="failedToLogIn">Kunde inte logga in: %s</string>
+    <string name="couldNotViewPhoto">Kunde inte öppna det här fotot.</string>
+    <string name="unknown">Okänt</string>
+    <string name="fileName">Filnamn: %s</string>
+    <string name="date">Datum: %s</string>
+    <string name="failedToFetch">Ett fel uppstod vid hämtningen av foton från %s: %s</string>
+    <string name="uploadTo">Ladda upp till</string>
+    <string name="downloadLocally">Ladda ner lokalt</string>
+    <string name="delete">Ta bort</string>
+    <string name="deleteConfirmation">Vill du verkligen ta bort detta fotot? Du kan inte ångra detta.</string>
+    <string name="yes">Ja</string>
+    <string name="no">Nej</string>
+    <string name="failedToUpdate">Ett fel uppstod när fotot skulle uppdateras: %s</string>
+    <string name="updatedSuccessfully">Fotot uppdaterades korrekt.</string>
+    <string name="changeLocation">Ändra plats</string>
+    <string name="chooseLocation">Välj en plats på kartan</string>
+    <string name="save">Spara</string>
+    <string name="cancel">Avbryt</string>
+    <string name="changeLocationConfirmation">Vill du verkligen ändra detta fotots plats? Du kan inte ångra detta.</string>
+    <string name="addLocation">Lägg till plats</string>
+    <string name="saving">Sparar...</string>
+    <string name="uploading">Laddar upp...</string>
+    <string name="downloading">Laddar ner...</string>
+    <string name="noBackWhenSaving">Ändringarna sparas, vänligen vänta.</string>
+    <string name="rotateLeft">Rotera till vänster</string>
+    <string name="rotateRight">Rotera till höger</string>
+    <string name="blomp">Blomp</string>
+    <string name="email">Epost</string>
+    <string name="password">Lösenord</string>
+    <string name="logInTo">Logga in till %s</string>
+    <string name="ok">OK</string>
+    <string name="couldNotFetchPhotos">Kunde inte hämta foton från %s: %s</string>
+    <string name="localStorage">Lokal lagring</string>
+    <string name="selected">Markerad</string>
+    <plurals name="multipleSelected">
+        <item quantity="one">%d foto markerat</item>
+        <item quantity="other">%d foton markerade</item>
+    </plurals>
+    <string name="location">Plats: %s</string>
+    <plurals name="multipleLocations">
+        <item quantity="one">%d plats</item>
+        <item quantity="other">%d platser</item>
+    </plurals>
+    <string name="couldNotFetchPhoto">Ett fel uppstod vid hämntningen av det kompletta fotot: %s</string>
+    <string name="noTimezone">Ingen information om tidszonen.</string>
+    <string name="pCloud">pCloud</string>
+    <string name="oneDrive">OneDrive</string>
+    <string name="use">Använd %s</string>
+    <string name="autoUpload">Automatisk uppladdning till %s</string>
+    <string name="autoUploadFailed">Automatisk uppladdning av %s misslyckades. Försök att ladda upp fotot manuellt.</string>
+    <string name="photosFolder">Foton-mapp för %s</string>
+    <string name="invalidFileName">Filnamn kan inte innehålla något av följande tecken: %s</string>
+    <string name="fileNameTooLong">Filnamn kan inte vara längre än %d tecken</string>
+    <string name="aboutString"><![CDATA[Väder %1$s<br /><br />Av Gustav Lindberg<br /><br />Denna app är licensierad under <a href="%3$s">GNU GPL 3.0</a>.<br /><br />Källkod: <a href="%2$s">%2$s</a>]]></string>
+</resources>

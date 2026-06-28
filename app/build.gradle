@@ -1,0 +1,92 @@
+plugins {
+    alias(libs.plugins.android.application)
+}
+
+android {
+    namespace 'io.github.gustavlindberg99.photos'
+    compileSdk 37
+
+    configurations.all {
+        exclude group: 'org.apache.httpcomponents', module: 'httpclient'
+    }
+
+    defaultConfig {
+        applicationId "io.github.gustavlindberg99.photos"
+        minSdk 24
+        targetSdk 37
+        versionCode 1
+        versionName "1.0.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/INDEX.LIST"
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "META-INF/NOTICE*"
+            excludes += "META-INF/LICENSE*"
+        }
+    }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    buildFeatures {
+        viewBinding true
+        buildConfig true
+    }
+    useLibrary 'org.apache.http.legacy'
+}
+
+dependencies {
+    implementation libs.androidx.activity.ktx
+    implementation libs.androidx.core.ktx
+    implementation libs.androidx.appcompat
+    implementation libs.material
+    implementation libs.androidx.activity
+    implementation libs.androidx.constraintlayout
+    implementation libs.androidx.exifinterface
+    implementation libs.kotlinx.coroutines
+    implementation libs.androidx.lifecycle
+    implementation libs.androidx.recyclerview
+    implementation libs.flexbox
+    implementation libs.ktor.client.core
+    implementation libs.ktor.client.android
+    implementation libs.google.auth.library.oauth2.http
+    implementation libs.androidx.credentials
+    implementation libs.androidx.credentials.play.services.auth
+    implementation libs.play.services.auth
+    implementation libs.osmdroid
+    implementation libs.androidx.preference.ktx
+    implementation(libs.google.api.client) {
+        exclude group: 'org.apache.httpcomponents', module: 'httpclient'
+    }
+    implementation libs.google.api.services.drive
+    implementation libs.photoview
+    implementation libs.pcloud.core
+    implementation libs.pcloud.android
+    implementation libs.onedrive.sdk.android
+    implementation libs.msa.auth
+    implementation libs.adal
+    implementation libs.msal
+    implementation libs.okio
+    implementation libs.kotlin.reflect
+    implementation libs.androidsuspendutils
+    testImplementation libs.junit
+    testImplementation libs.robolectric
+    testImplementation libs.androidx.lifecycle.runtime.testing
+    testImplementation libs.kotlinx.coroutines.test
+}

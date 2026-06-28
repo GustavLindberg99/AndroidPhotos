@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".activity.PropertiesActivity">
+
+    <LinearLayout
+        android:id="@+id/PropertiesActivity_main"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical" />
+
+    <LinearLayout
+        android:id="@+id/PropertiesActivity_bottomSheet"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/white"
+        android:elevation="32dp"
+        android:orientation="vertical"
+        app:behavior_fitToContents="false"
+        app:behavior_halfExpandedRatio="0.5"
+        app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/PropertiesActivity_rotateLeftButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/rotateLeft"
+                android:src="@drawable/baseline_rotate_left_24" />
+
+            <ImageButton
+                android:id="@+id/PropertiesActivity_rotateRightButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/rotateRight"
+                android:src="@drawable/baseline_rotate_right_24" />
+
+            <ImageButton
+                android:id="@+id/PropertiesActivity_deleteButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/delete"
+                android:src="@drawable/baseline_delete_24" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/PropertiesActivity_fileNameRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/PropertiesActivity_dateTimeRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/PropertiesActivity_noTimezoneRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:drawablePadding="8dp"
+            android:text="@string/noTimezone"
+            android:textColor="#aa5500"
+            android:textSize="18sp"
+            android:visibility="gone"
+            app:drawableLeftCompat="@drawable/baseline_warning_24"
+            app:drawableTint="#aa5500" />
+
+        <LinearLayout
+            android:id="@+id/PropertiesActivity_storageSwitchesLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/PropertiesActivity_locationRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="18sp" />
+
+            <ImageButton
+                android:id="@+id/PropertiesActivity_changeLocationButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/changeLocation"
+                android:src="@drawable/baseline_edit_24" />
+
+            <ImageButton
+                android:id="@+id/PropertiesActivity_deleteLocationButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/delete"
+                android:src="@drawable/baseline_location_off_24" />
+
+            <ImageButton
+                android:id="@+id/PropertiesActivity_cancelChangeLocationButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/cancel"
+                android:src="@drawable/baseline_edit_off_24"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <org.osmdroid.views.MapView
+            android:id="@+id/PropertiesActivity_map"
+            android:layout_width="match_parent"
+            android:layout_height="256dp" />
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

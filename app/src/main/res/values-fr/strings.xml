@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Photos</string>
+    <string name="settings">Paramètres</string>
+    <string name="map">Carte</string>
+    <string name="googleDrive">Google Drive</string>
+    <string name="help">Aide</string>
+    <string name="feedback">Feedback</string>
+    <string name="about">À propos de Photos</string>
+    <string name="failedToLogIn">Une erreur s\'est produite en vous connectant: %s</string>
+    <string name="couldNotViewPhoto">Impossible d\'ouvrir cette photo.</string>
+    <string name="unknown">Inconnu</string>
+    <string name="fileName">Nom du fichier: %s</string>
+    <string name="date">Date: %s</string>
+    <string name="failedToFetch">Une erreur s\'est produite en téléchargeant les photos de %s: %s</string>
+    <string name="uploadTo">Sauvegarder sur</string>
+    <string name="downloadLocally">Télécharger localement</string>
+    <string name="delete">Supprimer</string>
+    <string name="deleteConfirmation">Voulez-vous vraiment supprimer cette photo? Cette action ne peut pas être annulée.</string>
+    <string name="yes">Oui</string>
+    <string name="no">Non</string>
+    <string name="failedToUpdate">Une erreur est survenue en mettant à jour cette photo: %s</string>
+    <string name="updatedSuccessfully">La photo a été enregistrée avec succès.</string>
+    <string name="changeLocation">Modifier le lieu</string>
+    <string name="chooseLocation">Choisissez un lieu sur la carte</string>
+    <string name="save">Enregistrer</string>
+    <string name="cancel">Annuler</string>
+    <string name="changeLocationConfirmation">Voulez-vous vraiment modifier le lieu de cette photo? Cette action ne peut pas être annulée.</string>
+    <string name="addLocation">Ajouter un lieu</string>
+    <string name="saving">Enregistrement...</string>
+    <string name="uploading">Téléchargement...</string>
+    <string name="downloading">Téléchargement...</string>
+    <string name="noBackWhenSaving">Les modifications sont en cours d\'enregistrement, veuillez patienter.</string>
+    <string name="rotateLeft">Pivoter à gauche</string>
+    <string name="rotateRight">Pivoter à droite</string>
+    <string name="blomp">Blomp</string>
+    <string name="email">Email</string>
+    <string name="password">Mot de passe</string>
+    <string name="logInTo">Se connecter à %s</string>
+    <string name="ok">OK</string>
+    <string name="couldNotFetchPhotos">Impossible de télécharger les photos de %s: %s</string>
+    <string name="localStorage">Stockage local</string>
+    <string name="selected">Sélectionné</string>
+    <plurals name="multipleSelected">
+        <item quantity="one">%d photo sélectionnée</item>
+        <item quantity="many">%d photos sélectionnées</item>
+    </plurals>
+    <string name="location">Lieu: %s</string>
+    <plurals name="multipleLocations">
+        <item quantity="one">%d lieu</item>
+        <item quantity="many">%d lieux</item>
+    </plurals>
+    <string name="couldNotFetchPhoto">Une erreur est survenue en téléchargeant la photo complète: %s</string>
+    <string name="noTimezone">Aucune information sur le fuseau horaire.</string>
+    <string name="pCloud">pCloud</string>
+    <string name="oneDrive">OneDrive</string>
+    <string name="use">Utiliser %s</string>
+    <string name="autoUpload">Sauvegarder automatiquement sur %s</string>
+    <string name="autoUploadFailed">La sauvegarde automatique de %s a échoué. Essayez de sauvegarder cette photo manuellement.</string>
+    <string name="photosFolder">Dossier photos pour %s</string>
+    <string name="invalidFileName">Un nom de fichier ne peut contenir aucun des caractères suivants: %s</string>
+    <string name="fileNameTooLong">Un nom de fichier ne peut pas être plus long que %d caractères</string>
+    <string name="aboutString"><![CDATA[Photos %1$s<br /><br />Par Gustav Lindberg<br /><br />Cette application est licencié sous <a href="%3$s">GNU GPL 3.0</a>.<br /><br />Code source: <a href="%2$s">%2$s</a>]]></string>
+</resources>
