@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.location.Geocoder
 import android.net.Uri
+import android.util.Log
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.core.net.toUri
@@ -72,6 +73,9 @@ class Photo(
         return this.sha1.hashCode()
     }
 
+    /**
+     * Compares this photo with another photo, so that photos that are shown first in the list (i.e. more recent) are considered smaller.
+     */
     public override fun compareTo(other: Photo): Int {
         val dateTimeResult =
             if (this.dateTime == null && other.dateTime == null) 0
@@ -79,10 +83,10 @@ class Photo(
             else if (other.dateTime == null) 1
             else this.dateTime.compareTo(other.dateTime)
         if (dateTimeResult != 0) {
-            return dateTimeResult
+            return -dateTimeResult
         }
         // Default to comparing the SHA1 checksums because comparing two different photos as equal would cause problems with sortedMap
-        return this.sha1.compareTo(other.sha1)
+        return -this.sha1.compareTo(other.sha1)
     }
 
     /**
@@ -262,12 +266,18 @@ class Photo(
     public suspend fun cityName(context: Context): String? {
         val location = this.location ?: return null
 
-        val address = withContext(Dispatchers.IO) {
-            // getFromLocation is deprecated in favor of an overload that's non-blocking and takes a callback. While that would be a better solution, it's not available until API level 33, so it can't be used here.
-            @Suppress("DEPRECATION")
-            Geocoder(context)
-                .getFromLocation(location.latitude, location.longitude, 1)
-                ?.firstOrNull()
+        val address = try {
+            withContext(Dispatchers.IO) {
+                // getFromLocation is deprecated in favor of an overload that's non-blocking and takes a callback. While that would be a better solution, it's not available until API level 33, so it can't be used here.
+                @Suppress("DEPRECATION")
+                Geocoder(context)
+                    .getFromLocation(location.latitude, location.longitude, 1)
+                    ?.firstOrNull()
+            }
+        }
+        catch (e: Exception) {
+            Log.w(this.javaClass.name, e.message, e)
+            null
         }
         val locality = address?.locality
         val cityName =

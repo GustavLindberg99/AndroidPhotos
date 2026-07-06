@@ -1,5 +1,6 @@
 package io.github.gustavlindberg99.photos.storage_client
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -45,10 +46,6 @@ private const val THUMBNAILS_DIR = "thumbnails"
 private const val METADATA_DIR = "metadata"
 private const val PHOTOS_FILE = "photos.json"
 
-private val cacheDir: File by lazy {
-    File(System.getProperty("java.io.tmpdir")!!)
-}
-
 /**
  * Gets the URI of the cached thumbnail using its SHA1. If the thumbnail isn't cached yet, downloads the entire photo from the given URI (or uses the provided bytes) and caches the thumbnail.
  *
@@ -68,7 +65,7 @@ public suspend fun getCachedThumbnailBySha1(
     bytes: ByteArray? = null
 ): Uri? {
     val extension = File(handle.toString()).extension
-    val thumbnailFile = cacheDir.resolve("$THUMBNAILS_DIR/$sha1.$extension")
+    val thumbnailFile = context.cacheDir.resolve("$THUMBNAILS_DIR/$sha1.$extension")
 
     if (!thumbnailFile.exists()) {
         val fetchedBytes = bytes ?: handle.getInputStream(context)
@@ -120,7 +117,7 @@ public suspend fun getCachedPhotoBySha1(
     val mainClient = clients.firstOrNull { it is LocalStorageClient } ?: clients.first()
     val mainHandle = handles[mainClient::class]!!
 
-    val metadataFile = cacheDir.resolve("$METADATA_DIR/$sha1.json")
+    val metadataFile = context.cacheDir.resolve("$METADATA_DIR/$sha1.json")
 
     val width: Int
     val height: Int
@@ -219,6 +216,7 @@ public suspend fun getCachedPhotoBySha1(
 /**
  * Gets the SHA1 of the given photo, and caches it if it isn't already cached. The cache is needed because otherwise an HTTP request would be needed to get the SHA1 of the photo. Usually a cheap HTTP request if the server can produce the SHA1 directly, but that can still be expensive if we need the SHA1s of many photos at once.
  *
+ * @param context       The context of the application.
  * @param pCloudClient  The PCloud client to use.
  * @param file          The file to get the SHA1 of.
  * @param apiClient     The PCloud API client to use.
@@ -226,12 +224,13 @@ public suspend fun getCachedPhotoBySha1(
  * @return The SHA1 of the given photo.
  */
 public suspend fun getCachedPCloudSha1(
+    context: Context,
     pCloudClient: PCloudClient,
     file: RemoteFile,
     apiClient: ApiClient
 ): String {
     val pCloudHash = file.hash()
-    val cacheFile = cacheDir.resolve("$METADATA_DIR/$pCloudHash.json")
+    val cacheFile = context.cacheDir.resolve("$METADATA_DIR/$pCloudHash.json")
     if (cacheFile.exists()) {
         // If the SHA1 is already cached, return it
         return cacheFile.readText(Charsets.UTF_8)
@@ -264,10 +263,11 @@ public suspend fun getCachedPCloudSha1(
 /**
  * Caches the given set of photos.
  *
+ * @param context   The context of the application.
  * @param allPhotos The photos to cache.
  */
-public fun setCachedPhotos(allPhotos: Set<Photo>) {
-    val file = cacheDir.resolve(PHOTOS_FILE)
+public fun setCachedPhotos(context: Context, allPhotos: Set<Photo>) {
+    val file = context.cacheDir.resolve(PHOTOS_FILE)
     val jsonData = JSONArray(allPhotos.map { it.toJson() })
     val json = JSONObject().apply {
         put(VERSION, BuildConfig.VERSION_CODE)
@@ -281,27 +281,31 @@ public fun setCachedPhotos(allPhotos: Set<Photo>) {
 /**
  * Gets the photos cached by setCachedPhotos.
  *
+ * @param context   The context of the application.
+ *
  * @return The photos.
  */
-public fun getCachedPhotos(): SortedSet<Photo> {
+public suspend fun getCachedPhotos(
+    context: Context
+): SortedSet<Photo> = withContext(Dispatchers.IO) {
     try {
-        val file = cacheDir.resolve(PHOTOS_FILE)
+        val file = context.cacheDir.resolve(PHOTOS_FILE)
         val json = JSONObject(file.readText())
         val jsonData = json.getJSONArray(DATA)
         // Make sure they're sorted so that they show up in the correct order in time when opening the app.
         // While the main activity takes care of sorting the thumbnails in space, it looks weird if photos last in the list appear before photos first in the list.
-        return jsonData.toJsonObjectList().map { Photo.fromJson(it) }.toSortedSet()
+        return@withContext jsonData.toJsonObjectList().map { Photo.fromJson(it) }.toSortedSet()
     }
     catch (_: IOException) {
         // This is normal if the cache is empty
-        return sortedSetOf()
+        return@withContext sortedSetOf()
     }
     catch (e: JSONException) {
         Log.e("cache", e.message, e)
-        return sortedSetOf()
+        return@withContext sortedSetOf()
     }
     catch (e: ClassNotFoundException) {
         Log.e("cache", e.message, e)
-        return sortedSetOf()
+        return@withContext sortedSetOf()
     }
 }

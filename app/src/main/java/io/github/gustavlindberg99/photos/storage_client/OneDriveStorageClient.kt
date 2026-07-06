@@ -140,7 +140,7 @@ class OneDriveStorageClient private constructor(
             id = existingFile.id
         }
         photo.handles[this::class] = OneDriveFileHandle(id)
-        PhotoManager.update(photo)
+        PhotoManager.update(this._context, photo)
     }
 
     public override suspend fun overwrite(oldPhoto: Photo, newBytes: ByteArray): Photo {
@@ -158,8 +158,8 @@ class OneDriveStorageClient private constructor(
             mutableMapOf(this::class to OneDriveFileHandle(newFile.id))
         ) ?: throw IOException("Cannot read from newly created photo")
         oldPhoto.handles.remove(this::class)
-        PhotoManager.update(oldPhoto)
-        return PhotoManager.update(newPhoto)
+        PhotoManager.update(this._context, oldPhoto)
+        return PhotoManager.update(this._context, newPhoto)
     }
 
     public override suspend fun delete(photo: Photo) {
@@ -168,7 +168,7 @@ class OneDriveStorageClient private constructor(
             this._client.drive.getItems(handle.id).buildRequest().delete(SuspendableCallback(it))
         }
         photo.handles.remove(this::class)
-        PhotoManager.update(photo)
+        PhotoManager.update(this._context, photo)
     }
 
     /**

@@ -241,8 +241,10 @@ abstract class PropertiesActivity : StorageManagerActivity() {
             )
         }
 
-        val minDate = this._photos.min().dateTime
-        val maxDate = this._photos.max().dateTime
+        // Reverse min and max because the Photo class considers photos with a later date to be first, since that's the order they're shown in
+        val minDate = this._photos.max().dateTime
+        val maxDate = this._photos.min().dateTime
+
         if (minDate == maxDate) {
             this._dateTimeRow.text = this.getString(R.string.date, minDate.toString())
         }

@@ -36,9 +36,9 @@ class PhotoTest : PhotoTestBase() {
 
     @Test
     fun photoCompare() {
-        assertTrue(photo1 < photo4) // Because of time zones
-        assertTrue(photo1 > photo5)
-        assertTrue(photo4 > photo5)
+        assertTrue(photo1 > photo4) // Because of time zones
+        assertTrue(photo1 < photo5)
+        assertTrue(photo4 < photo5)
     }
 
     @Test

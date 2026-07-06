@@ -1,6 +1,7 @@
 package io.github.gustavlindberg99.photos.activity
 
 import android.os.Bundle
+import android.util.Log
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -58,11 +59,20 @@ class PhotoActivity : PropertiesActivity() {
         }
 
         public override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            PhotoManager.photoFromIndex(position).showOnView(this@PhotoActivity, holder.photoView)
-            holder.photoView.setOnLongClickListener {
-                val photo = PhotoManager.photoFromIndex(position)
-                this@PhotoActivity.togglePhotoSelected(photo)
-                return@setOnLongClickListener true
+            try {
+                PhotoManager.photoFromIndex(position)
+                    .showOnView(this@PhotoActivity, holder.photoView)
+                holder.photoView.setOnLongClickListener {
+                    val photo = PhotoManager.photoFromIndex(position)
+                    this@PhotoActivity.togglePhotoSelected(photo)
+                    return@setOnLongClickListener true
+                }
+            }
+            catch (e: Exception) {
+                Log.w(this.javaClass.name, e.message, e)
+
+                // Assume the photo has been deleted, and close the activity
+                this@PhotoActivity.finish()
             }
         }
 

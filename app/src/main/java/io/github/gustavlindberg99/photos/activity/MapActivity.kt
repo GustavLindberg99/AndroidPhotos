@@ -2,10 +2,13 @@ package io.github.gustavlindberg99.photos.activity
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.drawable.toDrawable
 import androidx.lifecycle.lifecycleScope
 import com.github.gustavlindberg99.androidsuspendutils.launch
+import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.databinding.ActivityMapBinding
 import io.github.gustavlindberg99.photos.photo.Photo
 import io.github.gustavlindberg99.photos.photo.PhotoManager
@@ -65,10 +68,20 @@ class MapActivity : AppCompatActivity() {
                 }
             }
             marker.setOnMarkerClickListener { _, _ ->
-                val intent = Intent(this, PhotoActivity::class.java)
-                val index = PhotoManager.indexFromPhoto(photo)
-                intent.putExtra(PhotoActivity.PHOTO_INDEX, index)
-                this.startActivity(intent)
+                try {
+                    val intent = Intent(this, PhotoActivity::class.java)
+                    val index = PhotoManager.indexFromPhoto(photo)
+                    intent.putExtra(PhotoActivity.PHOTO_INDEX, index)
+                    this.startActivity(intent)
+                }
+                catch (e: Exception) {
+                    Log.w(this.javaClass.name, e.message, e)
+                    Toast.makeText(
+                        this,
+                        this.getString(R.string.couldNotViewPhoto),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
                 return@setOnMarkerClickListener true
             }
             this._binding.map.overlays.add(marker)

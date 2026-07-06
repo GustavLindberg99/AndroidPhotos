@@ -42,7 +42,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private val _clientTypes = mapOf<KClass<out StorageClient>, suspend () -> Unit>(
         GoogleDriveClient::class to
-                { GoogleDriveClient.authenticate(this, this._googleLogInLauncher) },
+        { GoogleDriveClient.authenticate(this, this._googleLogInLauncher) },
         OneDriveStorageClient::class to { OneDriveStorageClient.authenticate(this, true) },
         PCloudClient::class to { PCloudClient.authenticate(this, this._pCloudLogInLauncher) }
     )
@@ -129,11 +129,12 @@ class SettingsActivity : AppCompatActivity() {
             }
 
             autoUploadSwitch.setOnClickListenerAsync {
+                val allSha1s = PhotoManager.allPhotos(this).map { it.sha1 }.toSet()
                 this.getSharedPreferences(companion.PREFERENCES_KEY, Context.MODE_PRIVATE).edit {
                     putBoolean(StorageClient.Companion.AUTOMATIC_UPLOAD, autoUploadSwitch.isChecked)
                     putStringSet(
                         StorageClient.Companion.IGNORED_PHOTOS_FOR_AUTOMATIC_UPLOAD,
-                        PhotoManager.allPhotos().map { it.sha1 }.toSet()
+                        allSha1s
                     )
                 }
             }

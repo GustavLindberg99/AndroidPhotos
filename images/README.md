@@ -2,4 +2,4 @@ This folder is not used directly by AndroidStudio. If you make changes here, mak
 
 Vector assets that are in the `drawable` folder but not in this folder are built-in to Android Studio and were created by doing File > New > Vector Asset > Cip Art.
 
-The `ic_launcher_foreground.png` is used in PCloud's developer console as the icon that should be used when logging in to PCloud from the Photos app. It's not used anywhere in the app's source code directly.
+The `pcloud_icon.png` is used in PCloud's developer console as the icon that should be used when logging in to PCloud from the Photos app, and `google_play_icon.png` is used on Google Play. They're not used anywhere in the app's source code directly.

@@ -55,7 +55,7 @@ class PCloudClient private constructor(
         val photoFiles = this.photosInFolder(picturesFolder)
         for (file in photoFiles) {
             val mimeType = URLConnection.guessContentTypeFromName(file.name()) ?: continue
-            val sha1 = getCachedPCloudSha1(this, file, this._apiClient)
+            val sha1 = getCachedPCloudSha1(this._context, this, file, this._apiClient)
             val photo = getCachedPhotoBySha1(
                 this._context,
                 file.name(),
@@ -85,7 +85,14 @@ class PCloudClient private constructor(
         // Check if the file is already uploaded
         val existingFiles = photosInFolder(picturesFolder)
         val existingFile =
-            existingFiles.find { getCachedPCloudSha1(this, it, this._apiClient) == photo.sha1 }
+            existingFiles.find {
+                getCachedPCloudSha1(
+                    this._context,
+                    this,
+                    it,
+                    this._apiClient
+                ) == photo.sha1
+            }
 
         // Upload the file
         val id: Long
@@ -104,7 +111,7 @@ class PCloudClient private constructor(
             id = existingFile.fileId()
         }
         photo.handles[this::class] = PCloudFileHandle(id)
-        PhotoManager.update(photo)
+        PhotoManager.update(this._context, photo)
     }
 
     public override suspend fun overwrite(oldPhoto: Photo, newBytes: ByteArray): Photo {
@@ -130,8 +137,8 @@ class PCloudClient private constructor(
             mutableMapOf(this::class to PCloudFileHandle(newFile.fileId()))
         ) ?: throw IOException("Cannot read from newly created photo")
         oldPhoto.handles.remove(this::class)
-        PhotoManager.update(oldPhoto)
-        return PhotoManager.update(newPhoto)
+        PhotoManager.update(this._context, oldPhoto)
+        return PhotoManager.update(this._context, newPhoto)
     }
 
     public override suspend fun delete(photo: Photo) {
@@ -140,7 +147,7 @@ class PCloudClient private constructor(
             _apiClient.deleteFile(id.id).execute()
         }
         photo.handles.remove(this::class)
-        PhotoManager.update(photo)
+        PhotoManager.update(this._context, photo)
     }
 
     /**

@@ -37,7 +37,7 @@ class MainActivity : PropertiesActivity() {
     private val _mapButton: ImageButton by lazy { this.findViewById(R.id.MainActivity_mapButton) }
     private val _settingsButton: ImageButton by lazy { this.findViewById(R.id.MainActivity_settingsButton) }
     private val _photoAdapter: PhotoAdapter by lazy { PhotoAdapter() }
-    private val _photosInLayout = mutableListOf<Photo>()
+    private val _photosInLayout = sortedSetOf<Photo>()
     private var _syncJob: Job? = null
     private var _updateJob: Job? = null
 
@@ -97,7 +97,7 @@ class MainActivity : PropertiesActivity() {
 
             val removedClients = oldClients - newClients
             for (client in removedClients) {
-                PhotoManager.removeClient(client::class)
+                PhotoManager.removeClient(this, client::class)
             }
         }
 
@@ -162,18 +162,8 @@ class MainActivity : PropertiesActivity() {
      * @param photo The photo to add.
      */
     private fun addPhotoToLayout(photo: Photo) {
-        if (!this._photosInLayout.contains(photo)) {
-            this._photosInLayout.add(photo)
-
-            // Batch updates to avoid flickering and performance issues during mass additions
-            val updateJob = this._updateJob
-            if (updateJob == null || !updateJob.isActive) {
-                this._updateJob = this.lifecycleScope.launch {
-                    delay(100.milliseconds)
-                    _photosInLayout.sortDescending()
-                    _photoAdapter.submitList(_photosInLayout.toList())
-                }
-            }
+        if (this._photosInLayout.add(photo)) {
+            this.updatePhotosInLayout()
         }
     }
 
@@ -184,7 +174,20 @@ class MainActivity : PropertiesActivity() {
      */
     private fun removePhotoFromLayout(photo: Photo) {
         if (this._photosInLayout.remove(photo)) {
-            this._photoAdapter.submitList(this._photosInLayout.toList())
+            this.updatePhotosInLayout()
+        }
+    }
+
+    /**
+     * Updates the layout to show the photos in `this._photosInLayout`. Will not necessarily do it immediately, allowing to batch updates to avoid flickering and performance issues during mass additions or deletions.
+     */
+    private fun updatePhotosInLayout() {
+        val updateJob = this._updateJob
+        if (updateJob == null || !updateJob.isActive) {
+            this._updateJob = this.lifecycleScope.launch {
+                delay(100.milliseconds)
+                this._photoAdapter.submitList(this._photosInLayout.toList())
+            }
         }
     }
 
@@ -216,10 +219,20 @@ class MainActivity : PropertiesActivity() {
 
             holder.thumbnailView.setOnClickListener {
                 if (this@MainActivity.selectedPhotos().isEmpty()) {
-                    val intent = Intent(this@MainActivity, PhotoActivity::class.java)
-                    val index = PhotoManager.indexFromPhoto(photo)
-                    intent.putExtra(PhotoActivity.PHOTO_INDEX, index)
-                    this@MainActivity.startActivity(intent)
+                    try {
+                        val intent = Intent(this@MainActivity, PhotoActivity::class.java)
+                        val index = PhotoManager.indexFromPhoto(photo)
+                        intent.putExtra(PhotoActivity.PHOTO_INDEX, index)
+                        this@MainActivity.startActivity(intent)
+                    }
+                    catch (e: Exception) {
+                        Log.w(this.javaClass.name, e.message, e)
+                        Toast.makeText(
+                            this@MainActivity,
+                            this@MainActivity.getString(R.string.couldNotViewPhoto),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
                 else {
                     this@MainActivity.togglePhotoSelected(photo)

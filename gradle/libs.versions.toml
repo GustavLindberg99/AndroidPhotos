@@ -32,6 +32,7 @@ robolectric = "4.16.1"
 recyclerview = "1.4.0"
 activityKtx = "1.13.0"
 kotlinxCoroutinesTest = "1.11.0"
+coreKtxVersion = "1.7.0"
 
 [libraries]
 adal = { module = "com.microsoft.aad:adal", version.ref = "adal" }
@@ -71,6 +72,7 @@ androidx-preference-ktx = { group = "androidx.preference", name = "preference-kt
 androidx-activity-ktx = { group = "androidx.activity", name = "activity-ktx", version.ref = "activityKtx" }
 androidx-lifecycle-runtime-testing = { group = "androidx.lifecycle", name = "lifecycle-runtime-testing", version.ref = "lifecycleRuntimeKtx" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest" }
+core-ktx = { group = "androidx.test", name = "core-ktx", version.ref = "coreKtxVersion" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

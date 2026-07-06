@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import com.github.gustavlindberg99.androidsuspendutils.SuspendableLauncher
 import com.github.gustavlindberg99.androidsuspendutils.flow
 import com.github.gustavlindberg99.androidsuspendutils.useWithContext
+import com.github.gustavlindberg99.androidsuspendutils.withContext
 import io.github.gustavlindberg99.photos.photo.Photo
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
@@ -57,7 +58,8 @@ class LocalStorageClient private constructor(
             val sha1 = HashingSink.sha1(blackholeSink())
             try {
                 this._context.contentResolver.openInputStream(uri)
-                    ?.use { it.source().buffer().readAll(sha1) } ?: continue
+                    ?.useWithContext(Dispatchers.IO) { it.source().buffer().readAll(sha1) }
+                    ?: continue
             }
             catch (_: FileNotFoundException) {
                 // This race condition can happen after deleting a file. If it happens, ignore it, since it means the file is deleted.
@@ -151,8 +153,8 @@ class LocalStorageClient private constructor(
             mutableMapOf(this::class to handle)
         ) ?: throw IOException("Cannot read from newly created photo")
         oldPhoto.handles.remove(this::class)
-        PhotoManager.update(oldPhoto)
-        return PhotoManager.update(newPhoto)
+        PhotoManager.update(this._context, oldPhoto)
+        return PhotoManager.update(this._context, newPhoto)
     }
 
     public override suspend fun delete(photo: Photo) {
@@ -163,7 +165,7 @@ class LocalStorageClient private constructor(
         }
 
         photo.handles.remove(this::class)
-        PhotoManager.update(photo)
+        PhotoManager.update(this._context, photo)
     }
 
     /**
@@ -199,7 +201,8 @@ class LocalStorageClient private constructor(
      *
      * @return A list of triples with the file name, the MIME type, and the URI of the photo.
      */
-    private fun allMediaEntries(): List<Triple<String, String, Uri>> {
+    private suspend fun allMediaEntries(
+    ): List<Triple<String, String, Uri>> = withContext(Dispatchers.IO) {
         val projection = arrayOf(
             MediaStore.Images.Media._ID,
             MediaStore.Images.Media.DISPLAY_NAME,
@@ -228,7 +231,7 @@ class LocalStorageClient private constructor(
                 result.add(Triple(fileName, mimeType, uri))
             }
         }
-        return result
+        return@withContext result
     }
 
     companion object {

@@ -164,7 +164,7 @@ class GoogleDriveClient private constructor(
             id = existingFile.id
         }
         photo.handles[this::class] = GoogleDriveFileHandle(id)
-        PhotoManager.update(photo)
+        PhotoManager.update(this._context, photo)
     }
 
     public override suspend fun overwrite(oldPhoto: Photo, newBytes: ByteArray): Photo {
@@ -182,8 +182,8 @@ class GoogleDriveClient private constructor(
         val newPhoto = this.photoFromGoogleDriveFile(newFile, sha1)
             ?: throw IOException("Cannot read from newly created photo")
         oldPhoto.handles.remove(this::class)
-        PhotoManager.update(oldPhoto)
-        return PhotoManager.update(newPhoto)
+        PhotoManager.update(this._context, oldPhoto)
+        return PhotoManager.update(this._context, newPhoto)
     }
 
     public override suspend fun delete(photo: Photo) {
@@ -194,7 +194,7 @@ class GoogleDriveClient private constructor(
             this._service.files().update(handle.id, content).execute()
         }
         photo.handles.remove(this::class)
-        PhotoManager.update(photo)
+        PhotoManager.update(this._context, photo)
     }
 
     /**
