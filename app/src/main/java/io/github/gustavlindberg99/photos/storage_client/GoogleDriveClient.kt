@@ -91,9 +91,17 @@ class GoogleDriveClient private constructor(
     ) {
         protected override suspend fun getSubFolders(parent: File?): List<File> {
             val parentId = parent?.id ?: "root"
-            return this@GoogleDriveClient._service.files().list()
-                .setQ("mimeType = 'application/vnd.google-apps.folder' and '$parentId' in parents and trashed = false")
-                .execute().files
+            val result = mutableListOf<File>()
+            var pageToken: String? = null
+            do {
+                val fileList = this@GoogleDriveClient._service.files().list()
+                    .setQ("mimeType = 'application/vnd.google-apps.folder' and '$parentId' in parents and trashed = false")
+                    .setPageToken(pageToken)
+                    .execute()
+                result.addAll(fileList.files ?: emptyList())
+                pageToken = fileList.nextPageToken
+            } while (pageToken != null)
+            return result
         }
 
         protected override suspend fun createFolder(parent: File?, name: String): File {
@@ -220,21 +228,26 @@ class GoogleDriveClient private constructor(
      * @throws IOException If the files could not be retrieved.
      */
     private suspend fun allPhotoFiles(parentId: String): List<File> {
-        val files = withContext(Dispatchers.IO) {
-            this._service.files().list()
-                .setQ("'${parentId}' in parents and trashed = false")
-                .setFields("files($PHOTO_FIELDS)")
-                .execute().files
-        }
         val result = mutableListOf<File>()
-        for (file in files) {
-            if (file.mimeType == "application/vnd.google-apps.folder") {
-                result.addAll(allPhotoFiles(file.id))
+        var pageToken: String? = null
+        do {
+            val fileList = withContext(Dispatchers.IO) {
+                this._service.files().list()
+                    .setQ("'${parentId}' in parents and trashed = false")
+                    .setFields("nextPageToken, files($PHOTO_FIELDS)")
+                    .setPageToken(pageToken)
+                    .execute()
             }
-            else {
-                result.add(file)
+            for (file in fileList.files ?: emptyList()) {
+                if (file.mimeType == "application/vnd.google-apps.folder") {
+                    result.addAll(allPhotoFiles(file.id))
+                }
+                else {
+                    result.add(file)
+                }
             }
-        }
+            pageToken = fileList.nextPageToken
+        } while (pageToken != null)
         return result
     }
 

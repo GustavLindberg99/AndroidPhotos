@@ -1,7 +1,7 @@
 [versions]
 adal = "4.7.1"
 agp = "9.2.1"
-androidsuspendutils = "1.1.0"
+androidsuspendutils = "1.2.0"
 coreKtx = "1.19.0"
 flexbox = "3.0.0"
 googleApiClient = "2.9.0"
@@ -11,8 +11,6 @@ okio = "3.17.0"
 onedriveSdkAndroid = "1.3.1"
 pcloud = "1.11.0"
 junit = "4.13.2"
-junitVersion = "1.3.0"
-espressoCore = "3.7.0"
 appcompat = "1.7.1"
 ktorClient = "3.5.1"
 material = "1.14.0"
@@ -48,8 +46,6 @@ onedrive-sdk-android = { module = "com.onedrive.sdk:onedrive-sdk-android", versi
 pcloud-core = { module = "com.pcloud.sdk:java-core", version.ref = "pcloud" }
 pcloud-android = { module = "com.pcloud.sdk:android", version.ref = "pcloud" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
-androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
-androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktorClient" }
 ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "ktorClient" }

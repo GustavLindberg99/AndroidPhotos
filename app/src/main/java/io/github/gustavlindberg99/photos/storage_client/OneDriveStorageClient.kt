@@ -13,6 +13,7 @@ import com.onedrive.sdk.core.DefaultClientConfig
 import com.onedrive.sdk.core.IClientConfig
 import com.onedrive.sdk.extensions.Folder
 import com.onedrive.sdk.extensions.IItemCollectionPage
+import com.onedrive.sdk.extensions.IItemCollectionRequestBuilder
 import com.onedrive.sdk.extensions.IOneDriveClient
 import com.onedrive.sdk.extensions.Item
 import com.onedrive.sdk.extensions.OneDriveClient
@@ -47,7 +48,7 @@ class OneDriveStorageClient private constructor(
                 else this@OneDriveStorageClient._client.drive.getItems(parent.id)
             return suspendCancellableCoroutine {
                 parentRequest.children.buildRequest().get(SuspendableCallback(it))
-            }?.currentPage ?: emptyList()
+            }?.allPages()?.filterNotNull() ?: emptyList()
         }
 
         protected override suspend fun createFolder(parent: Item?, name: String): Item {
@@ -201,7 +202,7 @@ class OneDriveStorageClient private constructor(
         } ?: return@withContext emptySet()
 
         val result = mutableSetOf<Item>()
-        for (item in folder.currentPage) {
+        for (item in folder.allPages()) {
             if (item?.folder != null) {
                 result.addAll(
                     photosInFolder(
@@ -242,6 +243,26 @@ class OneDriveStorageClient private constructor(
             public override fun failure(e: ClientException) {
                 this._continuation.resumeWithException(e)
             }
+        }
+
+        /**
+         * Gets all pages of a collection.
+         *
+         * @return All pages of the collection.
+         */
+        private suspend fun IItemCollectionPage.allPages(): List<Item?> {
+            val result = mutableListOf<Item?>()
+            var page: IItemCollectionPage? = this
+            while (page != null) {
+                result.addAll(page.currentPage)
+                val nextPage: IItemCollectionRequestBuilder? = page.nextPage
+                page =
+                    if (nextPage == null) null
+                    else suspendCancellableCoroutine {
+                        nextPage.buildRequest().get(SuspendableCallback(it))
+                    }
+            }
+            return result
         }
 
         /**
