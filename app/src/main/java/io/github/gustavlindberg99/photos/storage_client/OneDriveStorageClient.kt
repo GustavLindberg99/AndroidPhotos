@@ -23,6 +23,8 @@ import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.OneDriveFileHandle
 import io.github.gustavlindberg99.photos.photo.Photo
 import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotosFolderManager
+import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotoBySha1
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -169,7 +171,7 @@ class OneDriveStorageClient private constructor(
             this._client.drive.getItems(handle.id).buildRequest().delete(SuspendableCallback(it))
         }
         photo.handles.remove(this::class)
-        PhotoManager.update(this._context, photo)
+        PhotoManager.update(this._context, photo, delete = true)
     }
 
     /**

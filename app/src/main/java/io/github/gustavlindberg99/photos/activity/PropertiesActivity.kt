@@ -28,6 +28,7 @@ import io.github.gustavlindberg99.photos.photo.Photo
 import io.github.gustavlindberg99.photos.photo.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
+import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
 import io.github.gustavlindberg99.photos.utils.initOsmdroid
 import kotlinx.coroutines.Job
 import org.osmdroid.events.MapEventsReceiver
@@ -35,6 +36,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
+import java.util.Collections
 import kotlin.math.max
 
 /**
@@ -55,12 +57,11 @@ abstract class PropertiesActivity : StorageManagerActivity() {
     private val _changeLocationButton: ImageButton by lazy { this.findViewById(R.id.PropertiesActivity_changeLocationButton) }
     private val _deleteLocationButton: ImageButton by lazy { this.findViewById(R.id.PropertiesActivity_deleteLocationButton) }
     private val _cancelChangeLocationButton: ImageButton by lazy { this.findViewById(R.id.PropertiesActivity_cancelChangeLocationButton) }
-    private val _storageSwitchesLayout: LinearLayout by lazy { this.findViewById(R.id.PropertiesActivity_storageSwitchesLayout) }
+    private val _storageCheckboxesLayout: LinearLayout by lazy { this.findViewById(R.id.PropertiesActivity_storageSwitchesLayout) }
 
-    private val _checkboxes = mutableMapOf<StorageClient, MaterialCheckBox>()
+    private val _storageCheckboxes = mutableMapOf<StorageClient, MaterialCheckBox>()
 
-    private val _photos = mutableSetOf<Photo>()
-    private val _photosBeingEdited = mutableSetOf<Photo>()
+    private val _selectedPhotos = mutableSetOf<Photo>()
 
     private var _getLocationJob: Job? = null
 
@@ -107,8 +108,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         this._bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
 
         PhotoManager.setPhotoRemovedListener(this, { photo ->
-            this._photos.remove(photo)
-            this._photosBeingEdited.remove(photo)
+            this._selectedPhotos.remove(photo)
             this.updateUi()
         })
 
@@ -146,29 +146,35 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         super.onResume()
         this._map.onResume()
 
-        if (this._photos.isEmpty()) {
-            this._storageSwitchesLayout.removeAllViews()
-            this._checkboxes.clear()
-            this.lifecycleScope.launch {
-                for (client in storageClients()) {
+        this.lifecycleScope.launch {
+            // Update storage checkboxes only if no photo is selected, otherwise they will disappear and reappear if the user reopens the app while a photo is selected
+            val storageClients = this.storageClients()
+            if (this._selectedPhotos.isEmpty()) {
+                this._storageCheckboxesLayout.removeAllViews()
+                this._storageCheckboxes.clear()
+                for (client in storageClients) {
                     val checkbox = MaterialCheckBox(this)
                     checkbox.textSize = 18f
                     checkbox.setOnClickListenerAsync {
-                        checkbox.text =
-                            if (client is LocalStorageClient) this.getString(R.string.downloading)
-                            else this.getString(R.string.uploading)
-                        changeBackupState(setOf(client), checkbox.isChecked)
+                        this.changeBackupState(setOf(client), checkbox.isChecked)
                     }
-                    this._storageSwitchesLayout.addView(checkbox)
-                    this._checkboxes[client] = checkbox
+                    this._storageCheckboxesLayout.addView(checkbox)
+                    this._storageCheckboxes[client] = checkbox
                 }
             }
+
+            // Update the enabled state of the buttons
+            this.updateUi()
+
+            // Subscribe to upload state changes to update the UI
+            UploadManager.setStateChangedListener(this::updateDisabledStates)
         }
     }
 
     public override fun onPause() {
         super.onPause()
         this._map.onPause()
+        UploadManager.removeStateChangedListener(this::updateDisabledStates)
     }
 
     public override fun setContentView(layoutResId: Int) {
@@ -186,12 +192,12 @@ abstract class PropertiesActivity : StorageManagerActivity() {
      */
     public open fun togglePhotoSelected(photo: Photo, updateUi: Boolean = true): Boolean {
         val result: Boolean
-        if (this._photos.contains(photo)) {
-            this._photos.remove(photo)
+        if (this._selectedPhotos.contains(photo)) {
+            this._selectedPhotos.remove(photo)
             result = false
         }
         else {
-            this._photos.add(photo)
+            this._selectedPhotos.add(photo)
             result = true
         }
         if (updateUi) {
@@ -205,7 +211,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
      * Deselects all photos.
      */
     public open fun deselectAllPhotos() {
-        this._photos.clear()
+        this._selectedPhotos.clear()
         this.updateUi()
     }
 
@@ -215,54 +221,56 @@ abstract class PropertiesActivity : StorageManagerActivity() {
      * @return The selected photos.
      */
     public fun selectedPhotos(): Set<Photo> {
-        return this._photos
+        return this._selectedPhotos
     }
 
     /**
      * Updates the UI to show the selected photos.
      */
     private fun updateUi() {
-        if (this._photos.isEmpty()) {
+        if (this._selectedPhotos.isEmpty()) {
             this._bottomSheetBehavior.state = BottomSheetBehavior.STATE_HIDDEN
             return
         }
 
         this._bottomSheetBehavior.state = BottomSheetBehavior.STATE_HALF_EXPANDED
 
-        if (this._photos.size == 1) {
+        // Update file name
+        if (this._selectedPhotos.size == 1) {
             this._fileNameRow.text =
-                this.getString(R.string.fileName, this._photos.first().fileName)
+                this.getString(R.string.fileName, this._selectedPhotos.first().fileName)
         }
         else {
             this._fileNameRow.text = this.resources.getQuantityString(
                 R.plurals.multipleSelected,
-                this._photos.size,
-                this._photos.size
+                this._selectedPhotos.size,
+                this._selectedPhotos.size
             )
         }
 
+        // Update date
         // Reverse min and max because the Photo class considers photos with a later date to be first, since that's the order they're shown in
-        val minDate = this._photos.max().dateTime
-        val maxDate = this._photos.min().dateTime
-
+        val minDate = this._selectedPhotos.max().dateTime
+        val maxDate = this._selectedPhotos.min().dateTime
         if (minDate == maxDate) {
             this._dateTimeRow.text = this.getString(R.string.date, minDate.toString())
         }
         else {
             this._dateTimeRow.text = this.getString(R.string.date, "$minDate - $maxDate")
         }
-        val hasTimezone = this._photos.all { it.hasTimezone }
+        val hasTimezone = this._selectedPhotos.all { it.hasTimezone }
         this._noTimezoneRow.isVisible = !hasTimezone
 
+        // Update location text
         val photoWithLocation =
-            this._photos.firstOrNull { it.location != null } ?: this._photos.firstOrNull()
+            this._selectedPhotos.firstOrNull { it.location != null } ?: this._selectedPhotos.firstOrNull()
         if (photoWithLocation?.location == null) {
             this._map.visibility = View.GONE
             this._locationRow.text =
                 this.getString(R.string.location, this.getString(R.string.unknown))
         }
         else {
-            val photosWithLocations = this._photos.filter { it.location != null }
+            val photosWithLocations = this._selectedPhotos.filter { it.location != null }
             this._map.visibility = View.VISIBLE
             this._getLocationJob?.cancel()
             this._getLocationJob = null
@@ -280,8 +288,9 @@ abstract class PropertiesActivity : StorageManagerActivity() {
             }
         }
 
+        // Update map
         this._map.overlays.clear()
-        for (photo in this._photos) {
+        for (photo in this._selectedPhotos) {
             if (photo.location != null) {
                 val marker = Marker(this._map)
                 marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
@@ -295,7 +304,8 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         }
         this._map.invalidate()  // Redraw the map to update the markers
 
-        if (this._photos.size == 1) {
+        // Update change location buttons
+        if (this._selectedPhotos.size == 1) {
             this._changeLocationButton.visibility = View.VISIBLE
             this._deleteLocationButton.visibility =
                 if (photoWithLocation?.location != null) View.VISIBLE else View.GONE
@@ -306,44 +316,95 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         }
         this._cancelChangeLocationButton.visibility = View.GONE
 
+        // Update which checkboxes are checked
         this.updateCheckboxStates()
-        this.updateDisabledStates()
+
+        // Update the enabled state of the buttons
+        this.lifecycleScope.launch {
+            var globalEnable = true
+            for (client in this.storageClients()) {
+                val uploads =
+                    UploadManager.currentUploads(client) + UploadManager.queuedUploads(client)
+                val enable = Collections.disjoint(this._selectedPhotos, uploads)
+                globalEnable = globalEnable && enable
+                this.setCheckboxEnabled(client, enable)
+            }
+            this.setButtonsEnabled(globalEnable)
+        }
     }
 
     /**
      * Updates the state of all checkboxes.
      */
     private fun updateCheckboxStates() {
-        for ((client, checkbox) in this._checkboxes) {
-            if (this._photos.all { client::class in it.handles }) {
+        for ((client, checkbox) in this._storageCheckboxes) {
+            if (this._selectedPhotos.all { client::class in it.handles }) {
                 checkbox.checkedState = MaterialCheckBox.STATE_CHECKED
             }
-            else if (this._photos.all { client::class !in it.handles }) {
+            else if (this._selectedPhotos.all { client::class !in it.handles }) {
                 checkbox.checkedState = MaterialCheckBox.STATE_UNCHECKED
             }
             else {
                 checkbox.checkedState = MaterialCheckBox.STATE_INDETERMINATE
             }
-            val uploadText =
-                if (client is LocalStorageClient) this.getString(R.string.downloadLocally)
-                else this.getString(R.string.uploadTo) + " " + client.name
-            checkbox.text = uploadText
         }
     }
 
     /**
      * Updates the disabled states of all UI elements.
+     *
+     * @param photo     The photo to update the disabled states of.
+     * @param client    The client to update the disabled states of.
+     * @param state     The state to update the disabled states to.
      */
-    private fun updateDisabledStates() {
-        val enable = !this._photos.any { it in this._photosBeingEdited }
+    private fun updateDisabledStates(
+        photo: Photo,
+        client: StorageClient,
+        state: UploadManager.UploadState
+    ) {
+        if (photo in this._selectedPhotos) {
+            val enable = state == UploadManager.UploadState.FINISHED
+            this.setButtonsEnabled(enable)
+            this.setCheckboxEnabled(client, enable)
+            if (state == UploadManager.UploadState.FINISHED) {
+                this.updateCheckboxStates()
+            }
+        }
+    }
+
+    /**
+     * Sets the enabled state of the buttons that are common for all clients.
+     *
+     * @param enable    True if the buttons should be enabled, false if they should be disabled.
+     */
+    private fun setButtonsEnabled(enable: Boolean) {
         this._rotateLeftButton.isEnabled = enable
         this._rotateRightButton.isEnabled = enable
         this._deleteButton.isEnabled = enable
         this._changeLocationButton.isEnabled = enable
         this._deleteLocationButton.isEnabled = enable
         this._cancelChangeLocationButton.isEnabled = enable
-        for (checkbox in this._checkboxes.values) {
-            checkbox.isEnabled = enable
+    }
+
+    /**
+     * Sets the enabled state of the checkbox for the given client.
+     *
+     * @param client    The client to set the enabled state of.
+     * @param enable    True if the checkbox should be enabled, false if it should be disabled.
+     */
+    private fun setCheckboxEnabled(client: StorageClient, enable: Boolean) {
+        val checkbox = this._storageCheckboxes[client]
+        checkbox?.isEnabled = enable
+        if (enable) {
+            val uploadText =
+                if (client is LocalStorageClient) this.getString(R.string.downloadLocally)
+                else this.getString(R.string.uploadTo) + " " + client.name
+            checkbox?.text = uploadText
+        }
+        else {
+            checkbox?.text =
+                if (client is LocalStorageClient) this.getString(R.string.downloading)
+                else this.getString(R.string.uploading)
         }
     }
 
@@ -354,9 +415,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
      * @param upload    True if the photos should be uploaded, false if they should be deleted.
      */
     private suspend fun changeBackupState(clients: Set<StorageClient>, upload: Boolean) {
-        val photos = this._photos.toSet()
-        this._photosBeingEdited.addAll(photos)
-        this.updateDisabledStates()
+        val photos = this._selectedPhotos.toSet()
 
         // If deleting the photo from the last storage client, show a confirmation dialog
         val clientClasses = clients.map { it::class }
@@ -366,7 +425,6 @@ abstract class PropertiesActivity : StorageManagerActivity() {
                 .setMessage(R.string.deleteConfirmation)
                 .showAsync(R.string.yes, R.string.no)
             if (!proceed) {
-                this._photosBeingEdited.removeAll(photos)
                 this.updateUi()
                 return
             }
@@ -375,10 +433,10 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         // Update the backup state of all the photos concurrently
         try {
             for (client in clients) {
-                photos.concurrentForEach(this, 10) { photo ->
+                photos.concurrentForEach(this) { photo ->
                     if (upload) {
                         if (client::class !in photo.handles) {
-                            client.save(photo)
+                            UploadManager.save(this, client, photo)
                         }
                     }
                     else {
@@ -390,7 +448,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
             }
             Toast.makeText(
                 this,
-                R.string.updatedSuccessfully,
+                this.resources.getQuantityString(R.plurals.updatedSuccessfully, photos.size),
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -398,13 +456,12 @@ abstract class PropertiesActivity : StorageManagerActivity() {
             Log.w(this.javaClass.name, e.message, e)
             Toast.makeText(
                 this,
-                this.getString(R.string.failedToUpdate, e.message),
+                this.resources.getQuantityString(R.plurals.failedToUpdate, photos.size, e.message),
                 Toast.LENGTH_LONG
             ).show()
         }
 
         // Update the UI
-        this._photosBeingEdited.removeAll(photos)
         this.updateUi()
     }
 
@@ -414,26 +471,23 @@ abstract class PropertiesActivity : StorageManagerActivity() {
      * @param callback  A callback to be called on each selected photo, returning the bytes of the new photo.
      */
     private suspend fun editPhotos(callback: suspend (Photo) -> ByteArray) {
-        val photos = this._photos.toSet()
+        val photos = this._selectedPhotos.toSet()
         val newPhotos = mutableSetOf<Photo>()
-        this._photosBeingEdited.addAll(photos)
-        this.updateDisabledStates()
 
         // Save the changes
         try {
-            photos.concurrentForEach(this, 10) { photo ->
+            photos.concurrentForEach(this) { photo ->
                 val newBytes = callback(photo)
                 val clients = this.storageClients().filter { it::class in photo.handles }
                 for (client in clients) {
-                    val newPhoto = client.overwrite(photo, newBytes)
+                    val newPhoto = UploadManager.overwrite(this, client, photo, newBytes)
                     this.togglePhotoSelected(newPhoto, updateUi = false)
-                    this._photosBeingEdited.add(newPhoto)
                     newPhotos.add(newPhoto)
                 }
             }
             Toast.makeText(
                 this,
-                R.string.updatedSuccessfully,
+                this.resources.getQuantityString(R.plurals.updatedSuccessfully, photos.size),
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -441,14 +495,12 @@ abstract class PropertiesActivity : StorageManagerActivity() {
             Log.w(this.javaClass.name, e.message, e)
             Toast.makeText(
                 this,
-                this.getString(R.string.failedToUpdate, e.message),
+                this.resources.getQuantityString(R.plurals.failedToUpdate, photos.size, e.message),
                 Toast.LENGTH_LONG
             ).show()
         }
 
         // Update the UI
-        this._photosBeingEdited.removeAll(photos)
-        this._photosBeingEdited.removeAll(newPhotos)
         this.updateUi()
     }
 
@@ -456,7 +508,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
      * Opens the map to edit the location of the photo.
      */
     private fun startEditingLocation() {
-        if (this._photos.all { it.location == null }) {
+        if (this._selectedPhotos.all { it.location == null }) {
             this._map.controller.setZoom(2.0)
             this._map.controller.setCenter(GeoPoint(0.0, 0.0))
         }

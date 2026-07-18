@@ -21,6 +21,7 @@ import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.UriHandle
 import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotoBySha1
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
@@ -128,6 +129,7 @@ class LocalStorageClient private constructor(
             this._context.contentResolver.update(uri, contentValues, null, null)
         }
         photo.handles[this::class] = UriHandle(uri)
+        PhotoManager.update(this._context, photo)
     }
 
     public override suspend fun overwrite(oldPhoto: Photo, newBytes: ByteArray): Photo {
@@ -165,7 +167,7 @@ class LocalStorageClient private constructor(
         }
 
         photo.handles.remove(this::class)
-        PhotoManager.update(this._context, photo)
+        PhotoManager.update(this._context, photo, delete = true)
     }
 
     /**

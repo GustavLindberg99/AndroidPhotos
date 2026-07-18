@@ -1,9 +1,25 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
+<resources>
     <!-- Base application theme. -->
-    <style name="Base.Theme.Photos" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+    <style name="Theme.Photos" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorOnPrimary">@color/black</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Photos.AlertDialogButton</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Photos.AlertDialogButton</item>
     </style>
 
-    <style name="Theme.Photos" parent="Base.Theme.Photos" />
+    <style name="Theme.Photos.ActionBar" parent="Theme.Material3.DayNight">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorOnPrimary">@color/black</item>
+        <item name="actionBarStyle">@style/Widget.Photos.ActionBar</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Photos.AlertDialogButton</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Photos.AlertDialogButton</item>
+    </style>
+
+    <style name="Widget.Photos.ActionBar" parent="Widget.Material3.ActionBar.Solid">
+        <item name="background">@color/actionBar</item>
+    </style>
+
+    <style name="Widget.Photos.AlertDialogButton" parent="Widget.Material3.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/alertDialogButton</item>
+    </style>
 </resources>

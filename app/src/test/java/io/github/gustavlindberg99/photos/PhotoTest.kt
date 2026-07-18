@@ -43,11 +43,21 @@ class PhotoTest : PhotoTestBase() {
 
     @Test
     fun mergePhotos() {
-        photo2.mergeHandlesWith(photo1)
+        photo2.mergeHandlesWith(photo1, delete = false)
         assertEquals(
             photo2.handles, mapOf(
                 LocalStorageClient::class to UriHandle("file://fake-filesystem/photo1.jpg".toUri()),
                 GoogleDriveClient::class to GoogleDriveFileHandle("id2")
+            )
+        )
+    }
+
+    @Test
+    fun mergePhotosDelete() {
+        photo12.mergeHandlesWith(photo13, delete = true)
+        assertEquals(
+            photo12.handles, mapOf(
+                LocalStorageClient::class to UriHandle("file://fake-filesystem/photo12.jpg".toUri())
             )
         )
     }

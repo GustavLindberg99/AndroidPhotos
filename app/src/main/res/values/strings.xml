@@ -18,8 +18,14 @@
     <string name="deleteConfirmation">Are you sure you want to delete this photo? This cannot be undone.</string>
     <string name="yes">Yes</string>
     <string name="no">No</string>
-    <string name="failedToUpdate">An error occurred when updating this photo: %s</string>
-    <string name="updatedSuccessfully">The photo was updated successfully.</string>
+    <plurals name="updatedSuccessfully">
+        <item quantity="one">The photo was updated successfully.</item>
+        <item quantity="other">The photos were updated successfully.</item>
+    </plurals>
+    <plurals name="failedToUpdate">
+        <item quantity="one">An error occurred when updating this photo: %s</item>
+        <item quantity="other">An error occurred when updating these photos: %s</item>
+    </plurals>
     <string name="changeLocation">Change location</string>
     <string name="chooseLocation">Choose a location on the map</string>
     <string name="save">Save</string>
@@ -60,4 +66,7 @@
     <string name="invalidFileName">File names can\'t contain any of the following characters: %s</string>
     <string name="fileNameTooLong">File names can\'t be longer than %d characters</string>
     <string name="aboutString"><![CDATA[Photos %1$s<br /><br />By Gustav Lindberg<br /><br />This app is licensed under the <a href="%3$s">GNU GPL 3.0</a>.<br /><br />Source code: <a href="%2$s">%2$s</a>]]></string>
+    <string name="uploads">Uploads</string>
+    <string name="photoQueued">%s → %s\nQueued</string>
+    <string name="photoUploading">%s → %s\nUploading</string>
 </resources>

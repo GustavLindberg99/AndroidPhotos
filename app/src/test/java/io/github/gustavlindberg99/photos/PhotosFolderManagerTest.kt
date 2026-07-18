@@ -1,6 +1,6 @@
 package io.github.gustavlindberg99.photos
 
-import io.github.gustavlindberg99.photos.storage_client.PhotosFolderManager
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotosFolderManager
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

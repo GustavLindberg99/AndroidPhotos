@@ -2,21 +2,25 @@ package io.github.gustavlindberg99.photos.photo
 
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.github.gustavlindberg99.androidsuspendutils.launch
+import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
-import io.github.gustavlindberg99.photos.storage_client.getCachedPhotos
-import io.github.gustavlindberg99.photos.storage_client.setCachedPhotos
+import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
+import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotos
+import io.github.gustavlindberg99.photos.storage_client_utils.setCachedPhotos
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.yield
 import java.util.Collections
 import kotlin.reflect.KClass
+import kotlin.reflect.full.companionObjectInstance
 
 object PhotoManager {
     private var _allPhotos: MutableSet<Photo>? = null
@@ -24,14 +28,12 @@ object PhotoManager {
     private val _photoAdded = MutableSharedFlow<Photo>()
     private val _photoRemoved = MutableSharedFlow<Photo>()
 
-    private val _autosaveManager = AutosaveManager()
-
     /**
      * Resets the photo manager by clearing all photos.
      */
     @VisibleForTesting
     fun reset() {
-        this._allPhotos?.clear()
+        this._allPhotos = mutableSetOf()
     }
 
     /**
@@ -107,10 +109,16 @@ object PhotoManager {
      *
      * @param photo         The photo to update.
      * @param updateCache   True to update the cache, false to not.
+     * @param delete        True to remove handles when merging photos instead of adding them.
      *
      * @return The updated photo, either the existing one if it already exists, or the new one if it doesn't.
      */
-    public suspend fun update(context: Context, photo: Photo, updateCache: Boolean = true): Photo {
+    public suspend fun update(
+        context: Context,
+        photo: Photo,
+        updateCache: Boolean = true,
+        delete: Boolean = false
+    ): Photo {
         val collidingSha1s = this.allPhotos(context).any {
             it != photo && !Collections.disjoint(photo.handles.entries, it.handles.entries)
         }
@@ -135,7 +143,7 @@ object PhotoManager {
                 result = photo
             }
             else {
-                existingPhoto.mergeHandlesWith(photo)
+                existingPhoto.mergeHandlesWith(photo, delete)
                 result = existingPhoto
             }
         }
@@ -143,6 +151,16 @@ object PhotoManager {
             setCachedPhotos(context, this.allPhotos(context))
         }
         return result
+    }
+
+    /**
+     * Gets the updated photo. Useful if the original Photo object has been stored for a long time and might have changed since.
+     *
+     * @param context   The context to use.
+     * @param photo     The photo to get the updated version of.
+     */
+    public suspend fun getUpdated(context: Context, photo: Photo): Photo {
+        return this.allPhotos(context).find { it == photo } ?: photo
     }
 
     /**
@@ -225,11 +243,26 @@ object PhotoManager {
             this.update(context, photo, updateCache = false)
             if (client is LocalStorageClient) {
                 context.lifecycleScope.launch {
-                    try {
-                        this._autosaveManager.autoUpload(context, photo)
-                    }
-                    catch (e: Exception) {
-                        Log.w(this.javaClass.name, e.message, e)
+                    for (targetClient in context.storageClients()) {
+                        try {
+                            if (!shouldAutoUpload(context, targetClient, photo)) {
+                                return@launch
+                            }
+                        }
+                        catch (e: Exception) {
+                            Log.w(this.javaClass.name, e.message, e)
+                        }
+                        try {
+                            UploadManager.save(context, targetClient, photo)
+                        }
+                        catch (e: Exception) {
+                            Log.w(this.javaClass.name, e.message, e)
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.autoUploadFailed, photo.fileName),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
                 }
             }
@@ -238,5 +271,46 @@ object PhotoManager {
 
         // Update the cache
         setCachedPhotos(context, this.allPhotos(context))
+    }
+
+    /**
+     * Checks if the given photo should be uploaded to the given client.
+     *
+     * @param context   The context to use.
+     * @param client    The client to check.
+     * @param photo     The photo to check.
+     *
+     * @throws Exception If it could not be determined whether the photo should be uploaded.
+     */
+    private fun shouldAutoUpload(context: Context, client: StorageClient, photo: Photo): Boolean {
+        val companion = client::class.companionObjectInstance
+        if (companion !is StorageClient.Companion) {
+            return false
+        }
+        val preferences = context.getSharedPreferences(
+            companion.PREFERENCES_KEY,
+            Context.MODE_PRIVATE
+        )
+
+        // If auto upload is disabled, skip
+        val autoUpload = preferences.getBoolean(
+            StorageClient.Companion.AUTOMATIC_UPLOAD,
+            false
+        )
+        if (!autoUpload) {
+            return false
+        }
+
+        // If the photo is already on the client, skip
+        if (client::class in photo.handles) {
+            return false
+        }
+
+        // If the photo is in the ignore list, skip
+        val ignoreList = preferences.getStringSet(
+            StorageClient.Companion.IGNORED_PHOTOS_FOR_AUTOMATIC_UPLOAD,
+            null
+        )?.toMutableSet() ?: mutableSetOf()
+        return photo.sha1 !in ignoreList
     }
 }

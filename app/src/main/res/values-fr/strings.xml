@@ -19,8 +19,14 @@
     <string name="deleteConfirmation">Voulez-vous vraiment supprimer cette photo? Cette action ne peut pas être annulée.</string>
     <string name="yes">Oui</string>
     <string name="no">Non</string>
-    <string name="failedToUpdate">Une erreur est survenue en mettant à jour cette photo: %s</string>
-    <string name="updatedSuccessfully">La photo a été enregistrée avec succès.</string>
+    <plurals name="updatedSuccessfully">
+        <item quantity="one">La photo a été enregistrée avec succès.</item>
+        <item quantity="many">Les photos a été enregistrées avec succès.</item>
+    </plurals>
+    <plurals name="failedToUpdate">
+        <item quantity="one">Une erreur est survenue en mettant à jour cette photo: %s</item>
+        <item quantity="many">Une erreur est survenue en mettant à jour ces photos: %s</item>
+    </plurals>
     <string name="changeLocation">Modifier le lieu</string>
     <string name="chooseLocation">Choisissez un lieu sur la carte</string>
     <string name="save">Enregistrer</string>
@@ -61,4 +67,7 @@
     <string name="invalidFileName">Un nom de fichier ne peut contenir aucun des caractères suivants: %s</string>
     <string name="fileNameTooLong">Un nom de fichier ne peut pas être plus long que %d caractères</string>
     <string name="aboutString"><![CDATA[Photos %1$s<br /><br />Par Gustav Lindberg<br /><br />Cette application est licencié sous <a href="%3$s">GNU GPL 3.0</a>.<br /><br />Code source: <a href="%2$s">%2$s</a>]]></string>
+    <string name="uploads">Téléchargements</string>
+    <string name="photoQueued">%s → %s\nEn attente</string>
+    <string name="photoUploading">%s → %s\nTéléchargement</string>
 </resources>

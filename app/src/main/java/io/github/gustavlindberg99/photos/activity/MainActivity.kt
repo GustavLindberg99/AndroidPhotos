@@ -19,6 +19,7 @@ import com.github.gustavlindberg99.androidsuspendutils.SuspendableLauncher
 import com.github.gustavlindberg99.androidsuspendutils.concurrentForEach
 import com.github.gustavlindberg99.androidsuspendutils.launch
 import com.github.gustavlindberg99.androidsuspendutils.setOnClickListenerAsync
+import com.github.gustavlindberg99.androidsuspendutils.setOnLongClickListenerAsync
 import com.google.android.flexbox.FlexDirection
 import com.google.android.flexbox.FlexWrap
 import com.google.android.flexbox.FlexboxLayoutManager
@@ -35,6 +36,7 @@ class MainActivity : PropertiesActivity() {
     // RecyclerView will only keep currently visible thumbnails in memory, which significantly improves performance
     private val _recyclerView: RecyclerView by lazy { this.findViewById(R.id.MainActivity_recyclerView) }
     private val _mapButton: ImageButton by lazy { this.findViewById(R.id.MainActivity_mapButton) }
+    private val _uploadsButton: ImageButton by lazy { this.findViewById(R.id.MainActivity_uploadsButton) }
     private val _settingsButton: ImageButton by lazy { this.findViewById(R.id.MainActivity_settingsButton) }
     private val _photoAdapter: PhotoAdapter by lazy { PhotoAdapter() }
     private val _photosInLayout = sortedSetOf<Photo>()
@@ -103,6 +105,11 @@ class MainActivity : PropertiesActivity() {
 
         this._mapButton.setOnClickListenerAsync {
             val intent = Intent(this, MapActivity::class.java)
+            this.startActivity(intent)
+        }
+
+        this._uploadsButton.setOnClickListenerAsync {
+            val intent = Intent(this, UploadsActivity::class.java)
             this.startActivity(intent)
         }
 
@@ -213,15 +220,16 @@ class MainActivity : PropertiesActivity() {
         }
 
         public override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            val photo = getItem(position)
+            val photo = this.getItem(position)
             holder.thumbnailView.setPhoto(photo)
             holder.thumbnailView.photoSelected = this@MainActivity.selectedPhotos().contains(photo)
 
-            holder.thumbnailView.setOnClickListener {
+            holder.thumbnailView.setOnClickListenerAsync {
+                val updatedPhoto = PhotoManager.getUpdated(this@MainActivity, photo)
                 if (this@MainActivity.selectedPhotos().isEmpty()) {
                     try {
                         val intent = Intent(this@MainActivity, PhotoActivity::class.java)
-                        val index = PhotoManager.indexFromPhoto(photo)
+                        val index = PhotoManager.indexFromPhoto(updatedPhoto)
                         intent.putExtra(PhotoActivity.PHOTO_INDEX, index)
                         this@MainActivity.startActivity(intent)
                     }
@@ -235,13 +243,13 @@ class MainActivity : PropertiesActivity() {
                     }
                 }
                 else {
-                    this@MainActivity.togglePhotoSelected(photo)
+                    this@MainActivity.togglePhotoSelected(updatedPhoto)
                 }
             }
 
-            holder.thumbnailView.setOnLongClickListener {
-                this@MainActivity.togglePhotoSelected(photo)
-                return@setOnLongClickListener true
+            holder.thumbnailView.setOnLongClickListenerAsync {
+                val updatedPhoto = PhotoManager.getUpdated(this@MainActivity, photo)
+                this@MainActivity.togglePhotoSelected(updatedPhoto)
             }
         }
     }

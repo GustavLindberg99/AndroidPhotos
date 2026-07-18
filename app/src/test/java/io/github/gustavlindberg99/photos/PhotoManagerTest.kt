@@ -19,7 +19,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [36])
 class PhotoManagerTest : PhotoTestBase() {
     @Before
-    fun resetPhotoManager() {
+    fun reset() {
         PhotoManager.reset()
     }
 

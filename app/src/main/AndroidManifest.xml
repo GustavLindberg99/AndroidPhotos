@@ -25,19 +25,28 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Photos"
         tools:replace="android:theme">
-
         <uses-library
             android:name="org.apache.http.legacy"
             android:required="false" />
-        <activity
-            android:name=".activity.MapActivity"
-            android:exported="false" />
+
         <activity
             android:name=".activity.PhotoActivity"
             android:exported="false" />
         <activity
+            android:name=".activity.MapActivity"
+            android:exported="false"
+            android:label="@string/map" />
+        <activity
             android:name=".activity.SettingsActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:label="@string/settings"
+            android:theme="@style/Theme.Photos.ActionBar" />
+        <activity
+            android:name=".activity.UploadsActivity"
+            android:exported="false"
+            android:label="@string/uploads"
+            android:theme="@style/Theme.Photos.ActionBar"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".activity.MainActivity"
             android:exported="true">

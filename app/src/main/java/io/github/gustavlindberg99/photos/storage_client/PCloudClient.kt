@@ -8,6 +8,7 @@ import androidx.activity.result.ActivityResult
 import androidx.core.content.edit
 import com.github.gustavlindberg99.androidsuspendutils.SuspendableLauncher
 import com.github.gustavlindberg99.androidsuspendutils.flow
+import com.github.gustavlindberg99.androidsuspendutils.useWithContext
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import com.pcloud.sdk.ApiClient
 import com.pcloud.sdk.ApiError
@@ -25,6 +26,8 @@ import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.PCloudFileHandle
 import io.github.gustavlindberg99.photos.photo.Photo
 import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPCloudSha1
+import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotoBySha1
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import okio.ByteString
@@ -84,22 +87,18 @@ class PCloudClient private constructor(
 
         // Check if the file is already uploaded
         val existingFiles = photosInFolder(picturesFolder)
-        val existingFile =
-            existingFiles.find {
-                getCachedPCloudSha1(
-                    this._context,
-                    this,
-                    it,
-                    this._apiClient
-                ) == photo.sha1
-            }
+        val existingFile = existingFiles.find {
+            it.name() == photo.fileName &&
+            getCachedPCloudSha1(this._context, this, it, this._apiClient) == photo.sha1
+        }
 
         // Upload the file
         val id: Long
         if (existingFile == null) {
-            val bytes = photo.getInputStream(_context).use { it.readBytes() }
+            val bytes = photo.getInputStream(this._context)
+                .useWithContext(Dispatchers.IO) { it.readBytes() }
             val file = withContext(Dispatchers.IO) {
-                _apiClient.createFile(
+                this._apiClient.createFile(
                     picturesFolder,
                     photo.fileName,
                     DataSource.create(bytes)
@@ -147,7 +146,7 @@ class PCloudClient private constructor(
             _apiClient.deleteFile(id.id).execute()
         }
         photo.handles.remove(this::class)
-        PhotoManager.update(this._context, photo)
+        PhotoManager.update(this._context, photo, delete = true)
     }
 
     /**

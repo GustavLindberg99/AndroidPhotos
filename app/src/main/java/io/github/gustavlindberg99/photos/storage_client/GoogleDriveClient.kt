@@ -32,6 +32,8 @@ import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.GoogleDriveFileHandle
 import io.github.gustavlindberg99.photos.file_handle.UriHandle
 import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotosFolderManager
+import io.github.gustavlindberg99.photos.storage_client_utils.getCachedThumbnailBySha1
 import io.github.gustavlindberg99.photos.utils.makeGeoPoint
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -202,7 +204,7 @@ class GoogleDriveClient private constructor(
             this._service.files().update(handle.id, content).execute()
         }
         photo.handles.remove(this::class)
-        PhotoManager.update(this._context, photo)
+        PhotoManager.update(this._context, photo, delete = true)
     }
 
     /**

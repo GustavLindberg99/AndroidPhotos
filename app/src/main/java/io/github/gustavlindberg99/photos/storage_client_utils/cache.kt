@@ -1,4 +1,4 @@
-package io.github.gustavlindberg99.photos.storage_client
+package io.github.gustavlindberg99.photos.storage_client_utils
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -14,6 +14,9 @@ import io.github.gustavlindberg99.photos.BuildConfig
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.FileHandle
 import io.github.gustavlindberg99.photos.photo.Photo
+import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
+import io.github.gustavlindberg99.photos.storage_client.PCloudClient
+import io.github.gustavlindberg99.photos.storage_client.StorageClient
 import io.github.gustavlindberg99.photos.utils.makeGeoPoint
 import io.github.gustavlindberg99.photos.utils.rotate
 import io.github.gustavlindberg99.photos.utils.toJsonObjectList

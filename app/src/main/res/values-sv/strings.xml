@@ -19,8 +19,14 @@
     <string name="deleteConfirmation">Vill du verkligen ta bort detta fotot? Du kan inte ångra detta.</string>
     <string name="yes">Ja</string>
     <string name="no">Nej</string>
-    <string name="failedToUpdate">Ett fel uppstod när fotot skulle uppdateras: %s</string>
-    <string name="updatedSuccessfully">Fotot uppdaterades korrekt.</string>
+    <plurals name="updatedSuccessfully">
+        <item quantity="one">Fotot uppdaterades korrekt.</item>
+        <item quantity="other">Fotona uppdaterades korrekt.</item>
+    </plurals>
+    <plurals name="failedToUpdate">
+        <item quantity="one">Ett fel uppstod när fotot skulle uppdateras: %s</item>
+        <item quantity="other">Ett fel uppstod när fotona skulle uppdateras: %s</item>
+    </plurals>
     <string name="changeLocation">Ändra plats</string>
     <string name="chooseLocation">Välj en plats på kartan</string>
     <string name="save">Spara</string>
@@ -61,4 +67,7 @@
     <string name="invalidFileName">Filnamn kan inte innehålla något av följande tecken: %s</string>
     <string name="fileNameTooLong">Filnamn kan inte vara längre än %d tecken</string>
     <string name="aboutString"><![CDATA[Väder %1$s<br /><br />Av Gustav Lindberg<br /><br />Denna app är licensierad under <a href="%3$s">GNU GPL 3.0</a>.<br /><br />Källkod: <a href="%2$s">%2$s</a>]]></string>
+    <string name="uploads">Uppladdningar</string>
+    <string name="photoQueued">%s → %s\nI kö</string>
+    <string name="photoUploading">%s → %s\nLaddar upp</string>
 </resources>

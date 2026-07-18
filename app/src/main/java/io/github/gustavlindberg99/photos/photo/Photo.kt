@@ -73,6 +73,10 @@ class Photo(
         return this.sha1.hashCode()
     }
 
+    public override fun toString(): String {
+        return this.fileName + " (${this.sha1})"
+    }
+
     /**
      * Compares this photo with another photo, so that photos that are shown first in the list (i.e. more recent) are considered smaller.
      */
@@ -291,8 +295,13 @@ class Photo(
      *
      * @param other The photo to get the handles from.
      */
-    public fun mergeHandlesWith(other: Photo) {
-        this.handles.putAll(other.handles)
+    public fun mergeHandlesWith(other: Photo, delete: Boolean) {
+        if (delete) {
+            this.handles.keys.removeAll { it !in other.handles }
+        }
+        else {
+            this.handles.putAll(other.handles)
+        }
     }
 
     /**

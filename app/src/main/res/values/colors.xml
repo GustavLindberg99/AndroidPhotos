@@ -2,5 +2,8 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="orange">#AA5500</color>
+    <color name="primary">#FFCBDDFF</color>
+    <color name="actionBar">#FFCBDDFF</color>
+    <color name="alertDialogButton">#FF003294</color>
+    <color name="disabled_gray">#FFE2E2E2</color>
 </resources>

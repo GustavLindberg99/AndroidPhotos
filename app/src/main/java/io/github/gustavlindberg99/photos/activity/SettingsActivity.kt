@@ -1,6 +1,5 @@
 package io.github.gustavlindberg99.photos.activity
 
-import android.app.AlertDialog
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
@@ -15,6 +14,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.edit
@@ -65,6 +65,7 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         this.enableEdgeToEdge()
         this.setContentView(R.layout.activity_settings)
+        this.supportActionBar!!.elevation = 0f
 
         ViewCompat.setOnApplyWindowInsetsListener(this.findViewById(R.id.SettingsActivity_main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -201,7 +202,7 @@ class SettingsActivity : AppCompatActivity() {
                     "https://github.com/GustavLindberg99/AndroidPhotos/blob/master/LICENSE"
                 ), HtmlCompat.FROM_HTML_MODE_LEGACY
             )
-            textView.setTextColor(Color.BLACK)
+            textView.setTextColor(this.getColor(R.color.black))
             textView.setLinkTextColor(Color.BLUE)
             textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             val value = TypedValue()

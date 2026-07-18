@@ -1,4 +1,4 @@
-package io.github.gustavlindberg99.photos.storage_client
+package io.github.gustavlindberg99.photos.storage_client_utils
 
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import kotlinx.coroutines.Dispatchers
