@@ -17,6 +17,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
+import com.github.gustavlindberg99.androidsuspendutils.async
 import com.github.gustavlindberg99.androidsuspendutils.concurrentForEach
 import com.github.gustavlindberg99.androidsuspendutils.launch
 import com.github.gustavlindberg99.androidsuspendutils.setOnClickListenerAsync
@@ -263,7 +264,8 @@ abstract class PropertiesActivity : StorageManagerActivity() {
 
         // Update location text
         val photoWithLocation =
-            this._selectedPhotos.firstOrNull { it.location != null } ?: this._selectedPhotos.firstOrNull()
+            this._selectedPhotos.firstOrNull { it.location != null }
+                ?: this._selectedPhotos.firstOrNull()
         if (photoWithLocation?.location == null) {
             this._map.visibility = View.GONE
             this._locationRow.text =
@@ -430,36 +432,42 @@ abstract class PropertiesActivity : StorageManagerActivity() {
             }
         }
 
-        // Update the backup state of all the photos concurrently
-        try {
-            for (client in clients) {
-                photos.concurrentForEach(this) { photo ->
-                    if (upload) {
-                        if (client::class !in photo.handles) {
-                            UploadManager.save(this, client, photo)
+        // Update the backup state of all the photos concurrently. Run on UploadManager's coroutine so that it isn't canceled when the activity is destroyed.
+        UploadManager.lifecycleScope.async {
+            try {
+                for (client in clients) {
+                    photos.concurrentForEach(UploadManager) { photo ->
+                        if (upload) {
+                            if (client::class !in photo.handles) {
+                                UploadManager.save(client, photo)
+                            }
                         }
-                    }
-                    else {
-                        if (client::class in photo.handles) {
-                            client.delete(photo)
+                        else {
+                            if (client::class in photo.handles) {
+                                client.delete(photo)
+                            }
                         }
                     }
                 }
+                Toast.makeText(
+                    this,
+                    this.resources.getQuantityString(R.plurals.updatedSuccessfully, photos.size),
+                    Toast.LENGTH_LONG
+                ).show()
             }
-            Toast.makeText(
-                this,
-                this.resources.getQuantityString(R.plurals.updatedSuccessfully, photos.size),
-                Toast.LENGTH_LONG
-            ).show()
-        }
-        catch (e: Exception) {
-            Log.w(this.javaClass.name, e.message, e)
-            Toast.makeText(
-                this,
-                this.resources.getQuantityString(R.plurals.failedToUpdate, photos.size, e.message),
-                Toast.LENGTH_LONG
-            ).show()
-        }
+            catch (e: Exception) {
+                Log.w(this.javaClass.name, e.message, e)
+                Toast.makeText(
+                    this,
+                    this.resources.getQuantityString(
+                        R.plurals.failedToUpdate,
+                        photos.size,
+                        e.message
+                    ),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }.await()
 
         // Update the UI
         this.updateUi()
@@ -474,31 +482,37 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         val photos = this._selectedPhotos.toSet()
         val newPhotos = mutableSetOf<Photo>()
 
-        // Save the changes
-        try {
-            photos.concurrentForEach(this) { photo ->
-                val newBytes = callback(photo)
-                val clients = this.storageClients().filter { it::class in photo.handles }
-                for (client in clients) {
-                    val newPhoto = UploadManager.overwrite(this, client, photo, newBytes)
-                    this.togglePhotoSelected(newPhoto, updateUi = false)
-                    newPhotos.add(newPhoto)
+        // Save the changes. Run on UploadManager's coroutine so that it isn't canceled when the activity is destroyed.
+        UploadManager.lifecycleScope.async {
+            try {
+                photos.concurrentForEach(UploadManager) { photo ->
+                    val newBytes = callback(photo)
+                    val clients = this.storageClients().filter { it::class in photo.handles }
+                    for (client in clients) {
+                        val newPhoto = UploadManager.overwrite(client, photo, newBytes)
+                        this.togglePhotoSelected(newPhoto, updateUi = false)
+                        newPhotos.add(newPhoto)
+                    }
                 }
+                Toast.makeText(
+                    this,
+                    this.resources.getQuantityString(R.plurals.updatedSuccessfully, photos.size),
+                    Toast.LENGTH_LONG
+                ).show()
             }
-            Toast.makeText(
-                this,
-                this.resources.getQuantityString(R.plurals.updatedSuccessfully, photos.size),
-                Toast.LENGTH_LONG
-            ).show()
-        }
-        catch (e: Exception) {
-            Log.w(this.javaClass.name, e.message, e)
-            Toast.makeText(
-                this,
-                this.resources.getQuantityString(R.plurals.failedToUpdate, photos.size, e.message),
-                Toast.LENGTH_LONG
-            ).show()
-        }
+            catch (e: Exception) {
+                Log.w(this.javaClass.name, e.message, e)
+                Toast.makeText(
+                    this,
+                    this.resources.getQuantityString(
+                        R.plurals.failedToUpdate,
+                        photos.size,
+                        e.message
+                    ),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }.await()
 
         // Update the UI
         this.updateUi()

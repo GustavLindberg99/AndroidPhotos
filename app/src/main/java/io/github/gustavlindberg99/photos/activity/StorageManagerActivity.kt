@@ -13,6 +13,7 @@ import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import io.github.gustavlindberg99.photos.storage_client.OneDriveStorageClient
 import io.github.gustavlindberg99.photos.storage_client.PCloudClient
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 
 /**
@@ -47,6 +48,10 @@ abstract class StorageManagerActivity : AppCompatActivity() {
         return promises.mapNotNull { promise ->
             try {
                 promise.await()
+            }
+            catch (_: CancellationException) {
+                // The job was canceled, so we can ignore this exception
+                null
             }
             catch (e: Exception) {
                 Log.w(this.javaClass.name, e.message, e)

@@ -1,7 +1,9 @@
 package io.github.gustavlindberg99.photos.storage_client_utils
 
 import androidx.annotation.VisibleForTesting
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.lifecycleScope
 import com.github.gustavlindberg99.androidsuspendutils.async
 import io.github.gustavlindberg99.photos.photo.Photo
@@ -12,7 +14,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.reflect.KClass
 
-object UploadManager {
+object UploadManager : LifecycleOwner {
     // LinkedHashSet preserves both insertion order and uniqueness of elements
     private val _queuedUploads =
         mutableMapOf<KClass<out StorageClient>, LinkedHashMap<Photo, MutableSet<CancellableContinuation<Unit>>>>()
@@ -20,10 +22,16 @@ object UploadManager {
         mutableMapOf<KClass<out StorageClient>, MutableMap<Photo, Deferred<Photo>>>()
     private val _stateChangedListeners = mutableSetOf<(Photo, StorageClient, UploadState) -> Unit>()
 
+    public override val lifecycle = LifecycleRegistry(this)
+
     private const val MAX_SIMULTANEOUS_UPLOADS = 10
 
     public enum class UploadState {
         QUEUED, UPLOADING, FINISHED
+    }
+
+    init {
+        this.lifecycle.currentState = Lifecycle.State.RESUMED
     }
 
     /**
@@ -39,14 +47,13 @@ object UploadManager {
     /**
      * Queues the given photo to be saved to the given client.
      *
-     * @param context   The context to use.
      * @param client    The client to upload to.
      * @param photo     The photo to upload.
      *
      * @throws Exception If the upload failed.
      */
-    public suspend fun save(context: LifecycleOwner, client: StorageClient, photo: Photo) {
-        this.upload(context, client, photo, {
+    public suspend fun save(client: StorageClient, photo: Photo) {
+        this.upload(client, photo, {
             client.save(photo)
             return@upload photo
         })
@@ -55,26 +62,19 @@ object UploadManager {
     /**
      * Queues the given photo to be overwritten to the given client.
      *
-     * @param context   The context to use.
      * @param client    The client to upload to.
      * @param photo     The photo to upload.
      * @param newBytes  The new bytes to upload.
      *
      * @throws Exception If the upload failed.
      */
-    public suspend fun overwrite(
-        context: LifecycleOwner,
-        client: StorageClient,
-        photo: Photo,
-        newBytes: ByteArray
-    ): Photo {
-        return this.upload(context, client, photo, { client.overwrite(photo, newBytes) })
+    public suspend fun overwrite(client: StorageClient, photo: Photo, newBytes: ByteArray): Photo {
+        return this.upload(client, photo, { client.overwrite(photo, newBytes) })
     }
 
     /**
      * Queues the given photo to be uploaded to the given client.
      *
-     * @param context   The context to use.
      * @param client    The client to upload to.
      * @param photo     The photo to upload.
      * @param action    The action to perform on the client. Can be `save` or `overwrite`.
@@ -82,7 +82,6 @@ object UploadManager {
      * @throws Exception If the upload failed.
      */
     private suspend fun upload(
-        context: LifecycleOwner,
         client: StorageClient,
         photo: Photo,
         action: suspend () -> Photo
@@ -114,7 +113,7 @@ object UploadManager {
         }
 
         // Upload the photo
-        val promise = context.lifecycleScope.async { action() }
+        val promise = this.lifecycleScope.async { action() }
         currentUploads[photo] = promise
         for (listener in this._stateChangedListeners) {
             listener(photo, client, UploadState.UPLOADING)

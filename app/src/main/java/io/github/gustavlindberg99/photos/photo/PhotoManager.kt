@@ -1,6 +1,7 @@
 package io.github.gustavlindberg99.photos.photo
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -15,6 +16,7 @@ import io.github.gustavlindberg99.photos.storage_client.StorageClient
 import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotos
 import io.github.gustavlindberg99.photos.storage_client_utils.setCachedPhotos
+import io.github.gustavlindberg99.photos.utils.addToStringSet
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.yield
@@ -100,7 +102,7 @@ object PhotoManager {
      */
     public fun setPhotoRemovedListener(context: LifecycleOwner, listener: (Photo) -> Unit) {
         context.lifecycleScope.launch {
-            _photoRemoved.asSharedFlow().collect { listener(it) }
+            this._photoRemoved.asSharedFlow().collect { listener(it) }
         }
     }
 
@@ -242,18 +244,27 @@ object PhotoManager {
         client.getAllPhotos().collect { photo ->
             this.update(context, photo, updateCache = false)
             if (client is LocalStorageClient) {
-                context.lifecycleScope.launch {
+                UploadManager.lifecycleScope.launch {
                     for (targetClient in context.storageClients()) {
+                        val preferences: SharedPreferences
                         try {
-                            if (!shouldAutoUpload(context, targetClient, photo)) {
-                                return@launch
+                            preferences =
+                                this.autoUploadPreferences(context, targetClient) ?: continue
+                            if (!this.shouldAutoUpload(preferences, targetClient, photo)) {
+                                continue
                             }
                         }
                         catch (e: Exception) {
                             Log.w(this.javaClass.name, e.message, e)
+                            continue
                         }
+
                         try {
-                            UploadManager.save(context, targetClient, photo)
+                            UploadManager.save(targetClient, photo)
+                            preferences.addToStringSet(
+                                StorageClient.Companion.IGNORED_PHOTOS_FOR_AUTOMATIC_UPLOAD,
+                                photo.sha1
+                            )
                         }
                         catch (e: Exception) {
                             Log.w(this.javaClass.name, e.message, e)
@@ -276,22 +287,19 @@ object PhotoManager {
     /**
      * Checks if the given photo should be uploaded to the given client.
      *
-     * @param context   The context to use.
-     * @param client    The client to check.
-     * @param photo     The photo to check.
+     * @param preferences   The preferences to use.
+     * @param client        The client to check.
+     * @param photo         The photo to check.
+     *
+     * @return True if the photo should be uploaded, false otherwise.
      *
      * @throws Exception If it could not be determined whether the photo should be uploaded.
      */
-    private fun shouldAutoUpload(context: Context, client: StorageClient, photo: Photo): Boolean {
-        val companion = client::class.companionObjectInstance
-        if (companion !is StorageClient.Companion) {
-            return false
-        }
-        val preferences = context.getSharedPreferences(
-            companion.PREFERENCES_KEY,
-            Context.MODE_PRIVATE
-        )
-
+    private fun shouldAutoUpload(
+        preferences: SharedPreferences,
+        client: StorageClient,
+        photo: Photo
+    ): Boolean {
         // If auto upload is disabled, skip
         val autoUpload = preferences.getBoolean(
             StorageClient.Companion.AUTOMATIC_UPLOAD,
@@ -312,5 +320,24 @@ object PhotoManager {
             null
         )?.toMutableSet() ?: mutableSetOf()
         return photo.sha1 !in ignoreList
+    }
+
+    /**
+     * Gets the auto upload preferences for the given client.
+     *
+     * @param context   The context to use.
+     * @param client    The client to get the preferences for.
+     *
+     * @return The auto upload preferences for the given client, or null if it doesn't exist.
+     */
+    private fun autoUploadPreferences(context: Context, client: StorageClient): SharedPreferences? {
+        val companion = client::class.companionObjectInstance
+        if (companion !is StorageClient.Companion) {
+            return null
+        }
+        return context.getSharedPreferences(
+            companion.PREFERENCES_KEY,
+            Context.MODE_PRIVATE
+        )
     }
 }
