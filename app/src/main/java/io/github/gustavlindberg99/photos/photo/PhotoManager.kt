@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.yield
 import java.util.Collections
 import kotlin.reflect.KClass
-import kotlin.reflect.full.companionObjectInstance
 
 object PhotoManager {
     private var _allPhotos: MutableSet<Photo>? = null
@@ -244,12 +243,13 @@ object PhotoManager {
         client.getAllPhotos().collect { photo ->
             this.update(context, photo, updateCache = false)
             if (client is LocalStorageClient) {
+                // Auto-upload photo if needed
                 UploadManager.lifecycleScope.launch {
                     for (targetClient in context.storageClients()) {
                         val preferences: SharedPreferences
                         try {
-                            preferences =
-                                this.autoUploadPreferences(context, targetClient) ?: continue
+                            preferences = UploadManager.autoUploadPreferences(context, targetClient)
+                                ?: continue
                             if (!this.shouldAutoUpload(preferences, targetClient, photo)) {
                                 continue
                             }
@@ -318,26 +318,7 @@ object PhotoManager {
         val ignoreList = preferences.getStringSet(
             StorageClient.Companion.IGNORED_PHOTOS_FOR_AUTOMATIC_UPLOAD,
             null
-        )?.toMutableSet() ?: mutableSetOf()
+        )?.toSet() ?: emptySet()
         return photo.sha1 !in ignoreList
-    }
-
-    /**
-     * Gets the auto upload preferences for the given client.
-     *
-     * @param context   The context to use.
-     * @param client    The client to get the preferences for.
-     *
-     * @return The auto upload preferences for the given client, or null if it doesn't exist.
-     */
-    private fun autoUploadPreferences(context: Context, client: StorageClient): SharedPreferences? {
-        val companion = client::class.companionObjectInstance
-        if (companion !is StorageClient.Companion) {
-            return null
-        }
-        return context.getSharedPreferences(
-            companion.PREFERENCES_KEY,
-            Context.MODE_PRIVATE
-        )
     }
 }

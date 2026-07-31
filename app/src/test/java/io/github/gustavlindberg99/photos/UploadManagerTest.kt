@@ -56,7 +56,7 @@ class UploadManagerTest : PhotoTestBase() {
         // Queue all photos to be added
         for (photo in photos) {
             lifecycleOwner.lifecycleScope.launch {
-                UploadManager.save(lifecycleOwner, client, photo)
+                UploadManager.save(client, photo)
                 uploadedPhotos.add(photo.fileName)
             }
         }
@@ -215,7 +215,7 @@ class UploadManagerTest : PhotoTestBase() {
         for (photo in photos) {
             lifecycleOwner.lifecycleScope.launch {
                 try {
-                    UploadManager.save(lifecycleOwner, client, photo)
+                    UploadManager.save(client, photo)
                 }
                 catch (_: StorageClientMock.TestException) {
                     failedUploads.add(photo.fileName)

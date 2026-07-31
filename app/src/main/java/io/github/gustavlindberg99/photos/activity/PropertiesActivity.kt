@@ -30,8 +30,10 @@ import io.github.gustavlindberg99.photos.photo.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
 import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
+import io.github.gustavlindberg99.photos.utils.addToStringSet
 import io.github.gustavlindberg99.photos.utils.initOsmdroid
 import kotlinx.coroutines.Job
+import okio.ByteString.Companion.toByteString
 import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
@@ -487,6 +489,25 @@ abstract class PropertiesActivity : StorageManagerActivity() {
             try {
                 photos.concurrentForEach(UploadManager) { photo ->
                     val newBytes = callback(photo)
+
+                    // Add the new SHA1 to the auto-upload ignore list if the old SHA1 is there
+                    for (client in this.storageClients()) {
+                        val preferences =
+                            UploadManager.autoUploadPreferences(this, client) ?: continue
+                        val ignoreList = preferences.getStringSet(
+                            StorageClient.Companion.IGNORED_PHOTOS_FOR_AUTOMATIC_UPLOAD,
+                            null
+                        )?.toSet() ?: emptySet()
+                        if (photo.sha1 in ignoreList) {
+                            val newSha1 = newBytes.toByteString().sha1().hex()
+                            preferences.addToStringSet(
+                                StorageClient.Companion.IGNORED_PHOTOS_FOR_AUTOMATIC_UPLOAD,
+                                newSha1
+                            )
+                        }
+                    }
+
+                    // Upload the photo
                     val clients = this.storageClients().filter { it::class in photo.handles }
                     for (client in clients) {
                         val newPhoto = UploadManager.overwrite(client, photo, newBytes)

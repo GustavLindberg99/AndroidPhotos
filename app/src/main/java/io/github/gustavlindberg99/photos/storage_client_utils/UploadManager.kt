@@ -1,5 +1,7 @@
 package io.github.gustavlindberg99.photos.storage_client_utils
 
+import android.content.Context
+import android.content.SharedPreferences
 import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -13,6 +15,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.reflect.KClass
+import kotlin.reflect.full.companionObjectInstance
 
 object UploadManager : LifecycleOwner {
     // LinkedHashSet preserves both insertion order and uniqueness of elements
@@ -173,5 +176,24 @@ object UploadManager : LifecycleOwner {
      */
     public fun removeStateChangedListener(listener: (Photo, StorageClient, UploadState) -> Unit) {
         this._stateChangedListeners.remove(listener)
+    }
+
+    /**
+     * Gets the auto upload preferences for the given client.
+     *
+     * @param context   The context to use.
+     * @param client    The client to get the preferences for.
+     *
+     * @return The auto upload preferences for the given client, or null if it doesn't exist.
+     */
+    public fun autoUploadPreferences(context: Context, client: StorageClient): SharedPreferences? {
+        val companion = client::class.companionObjectInstance
+        if (companion !is StorageClient.Companion) {
+            return null
+        }
+        return context.getSharedPreferences(
+            companion.PREFERENCES_KEY,
+            Context.MODE_PRIVATE
+        )
     }
 }

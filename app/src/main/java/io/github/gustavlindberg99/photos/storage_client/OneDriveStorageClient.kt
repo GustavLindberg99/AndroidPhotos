@@ -39,8 +39,6 @@ import java.io.IOException
 import java.io.InputStream
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 
 class OneDriveStorageClient private constructor(
     private val _context: StorageManagerActivity,
@@ -243,7 +241,7 @@ class OneDriveStorageClient private constructor(
             return client
         }
         val promise = this._clientPromise ?: this._context.lifecycleScope.async {
-            createClient(this._context, 15.seconds)
+            createClient(this._context, UPLOAD_TIMEOUT)
         }
         this._clientPromise = promise
         return promise.await()
@@ -256,6 +254,9 @@ class OneDriveStorageClient private constructor(
         public override val PREFERENCES_KEY = "oneDrive"
         public override val DEFAULT_FOLDER = "Pictures"
         private const val SIGNED_IN = "signedIn"
+
+        private const val UPLOAD_TIMEOUT = 60000L
+        private const val LOGIN_TIMEOUT = 1000L
 
         /**
          * Utility class to be able to use Kotlin coroutines with the OneDrive library.
@@ -323,7 +324,7 @@ class OneDriveStorageClient private constructor(
          *
          * @throws ClientException If authentication failed.
          */
-        public suspend fun createClient(context: Activity, timeout: Duration): IOneDriveClient {
+        public suspend fun createClient(context: Activity, timeout: Long): IOneDriveClient {
             val oneDriveConfig = createConfig()
 
             val client = awaitApiCall(timeout) {
@@ -358,7 +359,7 @@ class OneDriveStorageClient private constructor(
                 return null
             }
             val client = try {
-                createClient(context, 1.seconds)
+                createClient(context, LOGIN_TIMEOUT)
             }
             catch (e: Exception) {
                 Log.w(this.javaClass.name, e.message, e)
@@ -379,7 +380,7 @@ class OneDriveStorageClient private constructor(
          */
         public suspend fun authenticate(context: Activity, allowSignIn: Boolean) {
             if (allowSignIn || signedIn(context)) {
-                createClient(context, 1.seconds)
+                createClient(context, LOGIN_TIMEOUT)
             }
         }
 
@@ -401,7 +402,7 @@ class OneDriveStorageClient private constructor(
                 context,
                 oneDriveConfig.logger
             )
-            awaitApiCall(1.seconds) {
+            awaitApiCall(LOGIN_TIMEOUT) {
                 oneDriveConfig.authenticator.logout(it)
             }
         }
@@ -413,9 +414,10 @@ class OneDriveStorageClient private constructor(
          * @param callback  A callback containing the API call.
          */
         private suspend fun <T> awaitApiCall(
-            timeout: Duration = 15.seconds,
+            timeout: Long = UPLOAD_TIMEOUT,
             callback: (SuspendableCallback<T>) -> Unit
         ): T? {
+            @Suppress("ConvertLongToDuration")  // The Duration overload is buggy
             return withTimeout(timeout) {
                 suspendCancellableCoroutine {
                     callback(SuspendableCallback(it))

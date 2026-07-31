@@ -52,10 +52,6 @@ class LocalStorageClient private constructor(
 
     public override fun getAllPhotos(): Flow<Photo> = flow { f ->
         for ((fileName, mimeType, uri) in this.allMediaEntries()) {
-            // Set extra permissions on newer Android versions. Older versions don't need this.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                MediaStore.setRequireOriginal(uri)
-            }
             val sha1 = HashingSink.sha1(blackholeSink())
             try {
                 this._context.contentResolver.openInputStream(uri)
@@ -136,7 +132,7 @@ class LocalStorageClient private constructor(
         val handle = oldPhoto.handles[this::class] as UriHandle
 
         this.askForPermissionIfNeeded {
-            this._context.contentResolver.openOutputStream(handle.uri)?.use { output ->
+            this._context.contentResolver.openOutputStream(handle.uri())?.use { output ->
                 newBytes.inputStream().useWithContext(Dispatchers.IO) { input ->
                     input.copyTo(output)
                 }
@@ -144,7 +140,7 @@ class LocalStorageClient private constructor(
         }
 
         val sha1 = HashingSink.sha1(blackholeSink())
-        this._context.contentResolver.openInputStream(handle.uri)
+        this._context.contentResolver.openInputStream(handle.uri())
             ?.use { it.source().buffer().readAll(sha1) }
             ?: throw IOException("Failed to read SHA1 from overwritten photo")
         val newPhoto = getCachedPhotoBySha1(
@@ -163,7 +159,7 @@ class LocalStorageClient private constructor(
         val handle = photo.handles[this::class] as UriHandle
 
         this.askForPermissionIfNeeded {
-            this._context.contentResolver.delete(handle.uri, null, null)
+            this._context.contentResolver.delete(handle.uri(), null, null)
         }
 
         photo.handles.remove(this::class)
@@ -227,8 +223,12 @@ class LocalStorageClient private constructor(
                 val id = cursor.getLong(idColumn)
                 val fileName = cursor.getString(nameColumn)
                 val mimeType = cursor.getString(mimeTypeColumn)
-                val uri =
+                val rawUri =
                     ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+                // Set extra permissions on newer Android versions. Older versions don't need this.
+                val uri =
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) rawUri
+                    else MediaStore.setRequireOriginal(rawUri)
 
                 result.add(Triple(fileName, mimeType, uri))
             }
