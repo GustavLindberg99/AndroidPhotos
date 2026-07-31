@@ -139,11 +139,7 @@ class MainActivity : PropertiesActivity() {
                 }
                 catch (e: Exception) {
                     Log.w(this.javaClass.name, e.message, e)
-                    Toast.makeText(
-                        this,
-                        this.getString(R.string.failedToFetch, client.name, e.message),
-                        Toast.LENGTH_LONG
-                    ).show()
+                    // Don't show a toast, that would be too noisy if the user is offline
                 }
             }
         }

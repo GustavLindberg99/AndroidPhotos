@@ -73,7 +73,7 @@ class GoogleDriveClient private constructor(
                     this@GoogleDriveClient._signInLauncher
                 ) ?: throw IOException("Failed to refresh Google Drive token")
                 this@GoogleDriveClient._token = newToken
-                AccessToken(newToken, null)
+                AccessToken.newBuilder().setTokenValue(newToken).build()
             }
         }
     }
@@ -82,8 +82,9 @@ class GoogleDriveClient private constructor(
         NetHttpTransport(),
         GsonFactory(),
         { request ->
-            HttpCredentialsAdapter(RefreshableCredentials(AccessToken(_token, null)))
-                .initialize(request)
+            HttpCredentialsAdapter(
+                RefreshableCredentials(AccessToken.newBuilder().setTokenValue(this._token).build())
+            ).initialize(request)
             request.connectTimeout = 3 * 60000 // 3 minutes
             request.readTimeout = 3 * 60000    // 3 minutes
         }).setApplicationName("Photos").build()

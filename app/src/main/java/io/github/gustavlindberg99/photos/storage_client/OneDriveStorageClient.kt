@@ -2,7 +2,10 @@ package io.github.gustavlindberg99.photos.storage_client
 
 import android.app.Activity
 import android.content.Context
+import android.util.Log
 import androidx.core.content.edit
+import androidx.lifecycle.lifecycleScope
+import com.github.gustavlindberg99.androidsuspendutils.async
 import com.github.gustavlindberg99.androidsuspendutils.flow
 import com.github.gustavlindberg99.androidsuspendutils.useWithContext
 import com.github.gustavlindberg99.androidsuspendutils.withContext
@@ -26,19 +29,25 @@ import io.github.gustavlindberg99.photos.photo.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client_utils.PhotosFolderManager
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotoBySha1
 import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
 import okio.ByteString
 import java.io.IOException
 import java.io.InputStream
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 class OneDriveStorageClient private constructor(
     private val _context: StorageManagerActivity,
-    private val _client: IOneDriveClient
+    private var _client: IOneDriveClient?
 ) : StorageClient {
+    private var _clientPromise: Deferred<IOneDriveClient>? = null
+
     public override val name = this._context.getString(R.string.oneDrive)
 
     private val _photosFolderManager = object : PhotosFolderManager<Item>(
@@ -46,10 +55,10 @@ class OneDriveStorageClient private constructor(
     ) {
         protected override suspend fun getSubFolders(parent: Item?): List<Item> {
             val parentRequest =
-                if (parent == null) this@OneDriveStorageClient._client.drive.root
-                else this@OneDriveStorageClient._client.drive.getItems(parent.id)
-            return suspendCancellableCoroutine {
-                parentRequest.children.buildRequest().get(SuspendableCallback(it))
+                if (parent == null) this@OneDriveStorageClient.client().drive.root
+                else this@OneDriveStorageClient.client().drive.getItems(parent.id)
+            return awaitApiCall {
+                parentRequest.children.buildRequest().get(it)
             }?.allPages()?.filterNotNull() ?: emptyList()
         }
 
@@ -58,11 +67,11 @@ class OneDriveStorageClient private constructor(
             newFolder.name = name
             newFolder.folder = Folder()
             val parentRequest =
-                if (parent == null) this@OneDriveStorageClient._client.drive.root
-                else this@OneDriveStorageClient._client.drive.getItems(parent.id)
-            val createdFolder: Item = suspendCancellableCoroutine {
+                if (parent == null) this@OneDriveStorageClient.client().drive.root
+                else this@OneDriveStorageClient.client().drive.getItems(parent.id)
+            val createdFolder: Item = awaitApiCall {
                 parentRequest.children.buildRequest()
-                    .post(newFolder, SuspendableCallback(it))
+                    .post(newFolder, it)
             } ?: throw IOException("Failed to create Pictures folder")
             return createdFolder
         }
@@ -80,8 +89,8 @@ class OneDriveStorageClient private constructor(
 
     public override fun getAllPhotos(): Flow<Photo> = flow { f ->
         val request =
-            if (photosFolder(this._context) == "") this._client.drive.root
-            else this._client.drive.getItems(
+            if (photosFolder(this._context) == "") this.client().drive.root
+            else this.client().drive.getItems(
                 this._photosFolderManager.getPhotosFolder()?.id ?: return@flow
             )
         val allFiles = this.photosInFolder(request)
@@ -104,8 +113,8 @@ class OneDriveStorageClient private constructor(
 
     public override suspend fun allPhotoHandles(): Set<OneDriveFileHandle> {
         val request =
-            if (photosFolder(this._context) == "") this._client.drive.root
-            else this._client.drive.getItems(
+            if (photosFolder(this._context) == "") this.client().drive.root
+            else this.client().drive.getItems(
                 this._photosFolderManager.getPhotosFolder()?.id ?: return emptySet()
             )
         return this.photosInFolder(request).map { OneDriveFileHandle(it.id) }.toSet()
@@ -114,8 +123,8 @@ class OneDriveStorageClient private constructor(
     public override suspend fun save(photo: Photo) {
         // Create the Pictures folder if it doesn't already exist
         val request =
-            if (photosFolder(this._context) == "") this._client.drive.root
-            else this._client.drive.getItems(
+            if (photosFolder(this._context) == "") this.client().drive.root
+            else this.client().drive.getItems(
                 this._photosFolderManager.getPhotosFolder()?.id
                     ?: this._photosFolderManager.createPhotosFolder().id
             )
@@ -130,12 +139,12 @@ class OneDriveStorageClient private constructor(
             val bytes =
                 photo.getInputStream(this._context)
                     .useWithContext(Dispatchers.IO) { it.readBytes() }
-            val createdFile: Item = suspendCancellableCoroutine {
+            val createdFile: Item = awaitApiCall {
                 request.children
                     .byId(photo.fileName)
                     .content
                     .buildRequest()
-                    .put(bytes, SuspendableCallback(it))
+                    .put(bytes, it)
             } ?: throw IOException("Failed to create file")
             id = createdFile.id
         }
@@ -148,9 +157,10 @@ class OneDriveStorageClient private constructor(
 
     public override suspend fun overwrite(oldPhoto: Photo, newBytes: ByteArray): Photo {
         val handle = oldPhoto.handles[this::class] as OneDriveFileHandle
-        val newFile: Item = suspendCancellableCoroutine {
-            this._client.drive.getItems(handle.id).content.buildRequest()
-                .put(newBytes, SuspendableCallback(it))
+        val client = this.client()
+        val newFile: Item = awaitApiCall {
+            client.drive.getItems(handle.id).content.buildRequest()
+                .put(newBytes, it)
         } ?: throw IOException("Failed to overwrite file")
         val sha1 = ByteString.of(*newBytes).sha1().hex()
         val newPhoto = getCachedPhotoBySha1(
@@ -167,8 +177,9 @@ class OneDriveStorageClient private constructor(
 
     public override suspend fun delete(photo: Photo) {
         val handle = photo.handles[this::class] as OneDriveFileHandle
-        suspendCancellableCoroutine {
-            this._client.drive.getItems(handle.id).buildRequest().delete(SuspendableCallback(it))
+        val client = this.client()
+        awaitApiCall {
+            client.drive.getItems(handle.id).buildRequest().delete(it)
         }
         photo.handles.remove(this::class)
         PhotoManager.update(this._context, photo, delete = true)
@@ -184,7 +195,7 @@ class OneDriveStorageClient private constructor(
      * @throws IOException If the file could not be retrieved.
      */
     public suspend fun getInputStream(id: String): InputStream = withContext(Dispatchers.IO) {
-        return@withContext this._client.drive.getItems(id).content.buildRequest().get()
+        return@withContext this.client().drive.getItems(id).content.buildRequest().get()
     }
 
     /**
@@ -199,8 +210,8 @@ class OneDriveStorageClient private constructor(
     private suspend fun photosInFolder(
         parentRequest: IBaseItemRequestBuilder
     ): Set<Item> = withContext(Dispatchers.IO) {
-        val folder: IItemCollectionPage = suspendCancellableCoroutine {
-            parentRequest.children.buildRequest().get(SuspendableCallback(it))
+        val folder: IItemCollectionPage = awaitApiCall {
+            parentRequest.children.buildRequest().get(it)
         } ?: return@withContext emptySet()
 
         val result = mutableSetOf<Item>()
@@ -208,7 +219,7 @@ class OneDriveStorageClient private constructor(
             if (item?.folder != null) {
                 result.addAll(
                     photosInFolder(
-                        this._client.drive.getItems(item.id)
+                        this.client().drive.getItems(item.id)
                     )
                 )
             }
@@ -217,6 +228,25 @@ class OneDriveStorageClient private constructor(
             }
         }
         return@withContext result
+    }
+
+    /**
+     * Gets the OneDrive client, or attempts to create it if it hasn't been created yet.
+     *
+     * @return The OneDrive client.
+     *
+     * @throws Exception If the client could not be created.
+     */
+    private suspend fun client(): IOneDriveClient {
+        val client = this._client
+        if (client != null) {
+            return client
+        }
+        val promise = this._clientPromise ?: this._context.lifecycleScope.async {
+            createClient(this._context, 15.seconds)
+        }
+        this._clientPromise = promise
+        return promise.await()
     }
 
     companion object : StorageClient.Companion {
@@ -260,8 +290,8 @@ class OneDriveStorageClient private constructor(
                 val nextPage: IItemCollectionRequestBuilder? = page.nextPage
                 page =
                     if (nextPage == null) null
-                    else suspendCancellableCoroutine {
-                        nextPage.buildRequest().get(SuspendableCallback(it))
+                    else awaitApiCall {
+                        nextPage.buildRequest().get(it)
                     }
             }
             return result
@@ -286,30 +316,23 @@ class OneDriveStorageClient private constructor(
         /**
          * Gets the OneDrive client.
          *
-         * @param context       The context to use.
-         * @param allowSignIn   True if the user should be prompted to sign in if they aren't already signed in.
+         * @param context   The context to use.
+         * @param timeout   The timeout to use.
          *
-         * @return The OneDrive client, or null if the user isn't signed in and [allowSignIn] is false.
+         * @return The OneDrive client.
          *
          * @throws ClientException If authentication failed.
          */
-        public suspend fun getClient(
-            context: Activity,
-            allowSignIn: Boolean
-        ): IOneDriveClient? {
-            val sharedPreferences =
-                context.getSharedPreferences(PREFERENCES_KEY, Context.MODE_PRIVATE)
-            val signedIn = sharedPreferences.getBoolean(SIGNED_IN, false)
-            if (!signedIn && !allowSignIn) {
-                return null
-            }
-
+        public suspend fun createClient(context: Activity, timeout: Duration): IOneDriveClient {
             val oneDriveConfig = createConfig()
 
-            val client = suspendCancellableCoroutine {
+            val client = awaitApiCall(timeout) {
                 OneDriveClient.Builder()
                     .fromConfig(oneDriveConfig)
-                    .loginAndBuildClient(context, SuspendableCallback(it))
+                    .loginAndBuildClient(context, it)
+            }
+            if (client == null) {
+                throw IOException("Failed to create OneDrive client")
             }
             context.getSharedPreferences(PREFERENCES_KEY, Context.MODE_PRIVATE).edit {
                 putBoolean(SIGNED_IN, true)
@@ -331,7 +354,16 @@ class OneDriveStorageClient private constructor(
             context: StorageManagerActivity,
             allowSignIn: Boolean
         ): OneDriveStorageClient? {
-            val client = getClient(context, allowSignIn) ?: return null
+            if (!allowSignIn && !signedIn(context)) {
+                return null
+            }
+            val client = try {
+                createClient(context, 1.seconds)
+            }
+            catch (e: Exception) {
+                Log.w(this.javaClass.name, e.message, e)
+                null
+            }
             return OneDriveStorageClient(context, client)
         }
 
@@ -346,7 +378,9 @@ class OneDriveStorageClient private constructor(
          * @throws ClientException If authentication failed.
          */
         public suspend fun authenticate(context: Activity, allowSignIn: Boolean) {
-            getClient(context, allowSignIn)
+            if (allowSignIn || signedIn(context)) {
+                createClient(context, 1.seconds)
+            }
         }
 
         public override fun name(context: Context): String {
@@ -367,9 +401,37 @@ class OneDriveStorageClient private constructor(
                 context,
                 oneDriveConfig.logger
             )
-            suspendCancellableCoroutine {
-                oneDriveConfig.authenticator.logout(SuspendableCallback(it))
+            awaitApiCall(1.seconds) {
+                oneDriveConfig.authenticator.logout(it)
             }
+        }
+
+        /**
+         * Awaits a OneDrive API call.
+         *
+         * @param timeout   The timeout to use. Needed because the OneDrive API doesn't respond at all if the phone is offline.
+         * @param callback  A callback containing the API call.
+         */
+        private suspend fun <T> awaitApiCall(
+            timeout: Duration = 15.seconds,
+            callback: (SuspendableCallback<T>) -> Unit
+        ): T? {
+            return withTimeout(timeout) {
+                suspendCancellableCoroutine {
+                    callback(SuspendableCallback(it))
+                }
+            }
+        }
+
+        /**
+         * Checks if the user is signed in to OneDrive.
+         *
+         * @param context The context to use.
+         */
+        private fun signedIn(context: Context): Boolean {
+            val sharedPreferences =
+                context.getSharedPreferences(PREFERENCES_KEY, Context.MODE_PRIVATE)
+            return sharedPreferences.getBoolean(SIGNED_IN, false)
         }
     }
 }
