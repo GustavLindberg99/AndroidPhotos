@@ -22,7 +22,7 @@ import kotlinx.coroutines.Deferred
 abstract class StorageManagerActivity : AppCompatActivity() {
     private val _requestPermissionLauncher = SuspendableLauncher(
         this,
-        ActivityResultContracts.RequestPermission(),
+        ActivityResultContracts.RequestMultiplePermissions(),
     )
 
     private val _intentSenderLauncher = SuspendableLauncher(

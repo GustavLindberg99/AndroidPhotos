@@ -32,24 +32,24 @@
                 android:id="@+id/PropertiesActivity_rotateLeftButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="@string/rotateLeft"
                 android:backgroundTint="@color/button_color"
+                android:contentDescription="@string/rotateLeft"
                 android:src="@drawable/baseline_rotate_left_24" />
 
             <ImageButton
                 android:id="@+id/PropertiesActivity_rotateRightButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="@string/rotateRight"
                 android:backgroundTint="@color/button_color"
+                android:contentDescription="@string/rotateRight"
                 android:src="@drawable/baseline_rotate_right_24" />
 
             <ImageButton
                 android:id="@+id/PropertiesActivity_deleteButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="@string/delete"
                 android:backgroundTint="@color/button_color"
+                android:contentDescription="@string/delete"
                 android:src="@drawable/baseline_delete_24" />
         </LinearLayout>
 
@@ -77,6 +77,11 @@
             app:drawableLeftCompat="@drawable/baseline_warning_24"
             app:drawableTint="#aa5500" />
 
+        <Spinner
+            android:id="@+id/PropertiesActivity_changeTimezoneButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
         <LinearLayout
             android:id="@+id/PropertiesActivity_storageSwitchesLayout"
             android:layout_width="match_parent"
@@ -99,24 +104,24 @@
                 android:id="@+id/PropertiesActivity_changeLocationButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="@string/changeLocation"
                 android:backgroundTint="@color/button_color"
+                android:contentDescription="@string/changeLocation"
                 android:src="@drawable/baseline_edit_24" />
 
             <ImageButton
                 android:id="@+id/PropertiesActivity_deleteLocationButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="@string/delete"
                 android:backgroundTint="@color/button_color"
+                android:contentDescription="@string/delete"
                 android:src="@drawable/baseline_location_off_24" />
 
             <ImageButton
                 android:id="@+id/PropertiesActivity_cancelChangeLocationButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="@string/cancel"
                 android:backgroundTint="@color/button_color"
+                android:contentDescription="@string/cancel"
                 android:src="@drawable/baseline_edit_off_24"
                 android:visibility="gone" />
         </LinearLayout>

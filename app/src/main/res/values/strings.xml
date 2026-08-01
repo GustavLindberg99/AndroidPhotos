@@ -69,4 +69,5 @@
     <string name="uploads">Uploads</string>
     <string name="photoQueued">%s → %s\nQueued</string>
     <string name="photoUploading">%s → %s\nUploading</string>
+    <string name="chooseTimezone">Choose timezone</string>
 </resources>

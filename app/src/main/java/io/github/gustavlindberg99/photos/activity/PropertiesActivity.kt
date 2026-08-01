@@ -6,8 +6,10 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -21,6 +23,7 @@ import com.github.gustavlindberg99.androidsuspendutils.async
 import com.github.gustavlindberg99.androidsuspendutils.concurrentForEach
 import com.github.gustavlindberg99.androidsuspendutils.launch
 import com.github.gustavlindberg99.androidsuspendutils.setOnClickListenerAsync
+import com.github.gustavlindberg99.androidsuspendutils.setOnItemSelectedAsync
 import com.github.gustavlindberg99.androidsuspendutils.showAsync
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.checkbox.MaterialCheckBox
@@ -55,6 +58,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
     private val _fileNameRow: TextView by lazy { this.findViewById(R.id.PropertiesActivity_fileNameRow) }
     private val _dateTimeRow: TextView by lazy { this.findViewById(R.id.PropertiesActivity_dateTimeRow) }
     private val _noTimezoneRow: TextView by lazy { this.findViewById(R.id.PropertiesActivity_noTimezoneRow) }
+    private val _changeTimezoneButton: Spinner by lazy { this.findViewById(R.id.PropertiesActivity_changeTimezoneButton) }
     private val _locationRow: TextView by lazy { this.findViewById(R.id.PropertiesActivity_locationRow) }
     private val _map: MapView by lazy { this.findViewById(R.id.PropertiesActivity_map) }
     private val _changeLocationButton: ImageButton by lazy { this.findViewById(R.id.PropertiesActivity_changeLocationButton) }
@@ -67,6 +71,14 @@ abstract class PropertiesActivity : StorageManagerActivity() {
     private val _selectedPhotos = mutableSetOf<Photo>()
 
     private var _getLocationJob: Job? = null
+
+    private val _allTimezones = arrayOf(
+        "-12:00", "-11:00", "-10:00", "-09:30", "-09:00", "-08:00", "-07:00", "-06:00",
+        "-05:00", "-04:00", "-03:30", "-03:00", "-02:00", "-01:00", "+00:00", "+01:00",
+        "+02:00", "+03:00", "+03:30", "+04:00", "+04:30", "+05:00", "+05:30", "+05:45",
+        "+06:00", "+06:30", "+07:00", "+08:00", "+08:45", "+09:00", "+09:30", "+10:00",
+        "+11:00", "+12:00", "+12:45", "+13:00", "+14:00"
+    )
 
     private val _mapEventsOverlay = MapEventsOverlay(object : MapEventsReceiver {
         override fun singleTapConfirmedHelper(point: GeoPoint?): Boolean {
@@ -137,6 +149,18 @@ abstract class PropertiesActivity : StorageManagerActivity() {
             }
         }
         this._cancelChangeLocationButton.setOnClickListener { this.updateUi() }
+
+        this._changeTimezoneButton.setOnItemSelectedAsync { _, _, position, _ ->
+            val newTimezone =
+                this._allTimezones.getOrNull(position) ?: return@setOnItemSelectedAsync
+            val oldTimezones = this._selectedPhotos.map { it.timezone }.toSet()
+            if (oldTimezones.size == 1) {
+                val oldTimezone = oldTimezones.first()
+                if (newTimezone != oldTimezone) {
+                    this.editPhotos { it.edit(this, timezone = newTimezone) }
+                }
+            }
+        }
 
         // Load osmdroid configuration
         initOsmdroid(this)
@@ -264,6 +288,33 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         val hasTimezone = this._selectedPhotos.all { it.hasTimezone }
         this._noTimezoneRow.isVisible = !hasTimezone
 
+        // Update timezone
+        val timezones = this._selectedPhotos.map { it.timezone }.toSet()
+        if (timezones.size == 1) {
+            val timezone = timezones.first()
+            if (timezone == null) {
+                this._changeTimezoneButton.visibility = View.VISIBLE
+                this._changeTimezoneButton.adapter = ArrayAdapter(
+                    this,
+                    android.R.layout.simple_spinner_item,
+                    this._allTimezones.map { "UTC$it" } + arrayOf(this.getString(R.string.chooseTimezone))
+                )
+                this._changeTimezoneButton.setSelection(this._allTimezones.size)
+            }
+            else {
+                this._changeTimezoneButton.visibility = View.VISIBLE
+                this._changeTimezoneButton.adapter = ArrayAdapter(
+                    this,
+                    android.R.layout.simple_spinner_item,
+                    this._allTimezones.map { "UTC$it" }
+                )
+                this._changeTimezoneButton.setSelection(this._allTimezones.indexOf(timezone))
+            }
+        }
+        else {
+            this._changeTimezoneButton.visibility = View.GONE
+        }
+
         // Update location text
         val photoWithLocation =
             this._selectedPhotos.firstOrNull { it.location != null }
@@ -385,6 +436,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         this._rotateLeftButton.isEnabled = enable
         this._rotateRightButton.isEnabled = enable
         this._deleteButton.isEnabled = enable
+        this._changeTimezoneButton.isEnabled = enable
         this._changeLocationButton.isEnabled = enable
         this._deleteLocationButton.isEnabled = enable
         this._cancelChangeLocationButton.isEnabled = enable
@@ -509,7 +561,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
 
                     // Upload the photo
                     val clients = this.storageClients().filter { it::class in photo.handles }
-                    for (client in clients) {
+                    clients.concurrentForEach(UploadManager) { client ->
                         val newPhoto = UploadManager.overwrite(client, photo, newBytes)
                         this.togglePhotoSelected(newPhoto, updateUi = false)
                         newPhotos.add(newPhoto)

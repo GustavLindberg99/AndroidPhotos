@@ -50,6 +50,7 @@ import kotlin.reflect.KClass
  * @param location      The geographical location at which the photo was taken, or null if unknown.
  * @param sha1          The SHA1 checksum of the photo, used for checking for equality.
  * @param _dateTime     The date and time the photo was taken in `yyyy:MM:dd HH:mm:ss` format, or null if unknown.
+ * @param timezone      The timezone the photo was taken in `±HH:MM` format, or null if unknown.
  * @param _thumbnailUri The URI of the thumbnail of the photo. Must be a local URI (usually a cache file).
  * @param handles       A map with storage client types as keys, and the file handle for that storage client as values.
  */
@@ -61,7 +62,7 @@ class Photo(
     public val location: GeoPoint?,
     public val sha1: String,
     private val _dateTime: String?,
-    private val _timezone: String?,
+    public val timezone: String?,
     private val _thumbnailUri: Uri,
     public val handles: MutableMap<KClass<out StorageClient>, FileHandle>
 ) : Comparable<Photo> {
@@ -112,8 +113,8 @@ class Photo(
             if (_dateTime != null) {
                 put(DATE_TIME, _dateTime)
             }
-            if (_timezone != null) {
-                put(TIMEZONE, _timezone)
+            if (timezone != null) {
+                put(TIMEZONE, timezone)
             }
             put(THUMBNAIL_URI, _thumbnailUri.toString())
             val handles = this@Photo.handles
@@ -199,9 +200,9 @@ class Photo(
             null
         }
         else try {
-            if (this._timezone != null) {
+            if (this.timezone != null) {
                 SimpleDateFormat("yyyy:MM:dd HH:mm:ssXXX", Locale.US)
-                    .parse(this._dateTime + this._timezone)
+                    .parse(this._dateTime + this.timezone)
             }
             else {
                 SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US)
@@ -215,7 +216,7 @@ class Photo(
     /**
      * Gets whether the photo has a timezone. If not, [dateTime] will default to the current timezone, which might not be correct.
      */
-    public val hasTimezone: Boolean = this._timezone != null
+    public val hasTimezone: Boolean = this.timezone != null
 
     /**
      * Gets the bytes of the photo.
@@ -307,8 +308,10 @@ class Photo(
     /**
      * Creates an edited version of this photo. Does not modify this object itself.
      *
-     * @param location   The new location to set.
-     * @param rotation      The rotation with respect to this photo's orientation.
+     * @param context   The context to use for loading the photo.
+     * @param location  The new location to set.
+     * @param rotation  The rotation relative to this photo's current orientation.
+     * @param timezone  The new timezone to set, in the `±HH:MM` format.
      *
      * @return The bytes of the new photo.
      *
@@ -317,7 +320,8 @@ class Photo(
     public suspend fun edit(
         context: StorageManagerActivity,
         location: GeoPoint? = this.location,
-        rotation: Int = 0
+        rotation: Int = 0,
+        timezone: String? = this.timezone
     ): ByteArray {
         val tempFile = withContext(Dispatchers.IO) {
             File.createTempFile(
@@ -353,6 +357,9 @@ class Photo(
                 else -> throw IllegalArgumentException("Invalid rotation: $newRotation")
             }
             exifInterface.setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
+        }
+        if (timezone != this.timezone) {
+            exifInterface.setAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL, timezone)
         }
         exifInterface.saveAttributes()
 

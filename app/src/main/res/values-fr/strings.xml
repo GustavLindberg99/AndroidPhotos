@@ -70,4 +70,5 @@
     <string name="uploads">Téléchargements</string>
     <string name="photoQueued">%s → %s\nEn attente</string>
     <string name="photoUploading">%s → %s\nTéléchargement</string>
+    <string name="chooseTimezone">Choisir un fuseau horaire</string>
 </resources>

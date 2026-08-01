@@ -70,4 +70,5 @@
     <string name="uploads">Uppladdningar</string>
     <string name="photoQueued">%s → %s\nI kö</string>
     <string name="photoUploading">%s → %s\nLaddar upp</string>
+    <string name="chooseTimezone">Välj tidszon</string>
 </resources>

@@ -24,14 +24,14 @@ data class UriHandle(private val _uri: Uri) : FileHandle {
         context: StorageManagerActivity
     ): InputStream = withContext(Dispatchers.IO) {
         // Run on IO thread to avoid strange crashes when changing between light and dark mode
-        if (this@UriHandle._uri.scheme in setOf("http", "https")) {
+        if (this._uri.scheme in setOf("http", "https")) {
             return@withContext HttpClient(Android) { expectSuccess = true }
-                .get(this@UriHandle._uri.toString())
+                .get(this._uri.toString())
                 .bodyAsChannel()
                 .toInputStream()
         }
         else {
-            return@withContext context.contentResolver.openInputStream(_uri)
+            return@withContext context.contentResolver.openInputStream(this.uri())
                 ?: throw IOException("No stream available")
         }
     }
@@ -44,6 +44,7 @@ data class UriHandle(private val _uri: Uri) : FileHandle {
     public fun uri(): Uri {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
             && this@UriHandle._uri.scheme !in setOf("http", "https")
+            && this._uri.getQueryParameter("requireOriginal") == null
         ) {
             return MediaStore.setRequireOriginal(this._uri)
         }

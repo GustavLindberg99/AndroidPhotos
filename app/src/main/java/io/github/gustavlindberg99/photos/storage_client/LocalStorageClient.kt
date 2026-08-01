@@ -26,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import okio.ByteString.Companion.toByteString
 import okio.HashingSink
 import okio.blackholeSink
 import okio.buffer
@@ -139,15 +140,12 @@ class LocalStorageClient private constructor(
             }
         }
 
-        val sha1 = HashingSink.sha1(blackholeSink())
-        this._context.contentResolver.openInputStream(handle.uri())
-            ?.use { it.source().buffer().readAll(sha1) }
-            ?: throw IOException("Failed to read SHA1 from overwritten photo")
+        val newSha1 = newBytes.toByteString().sha1().hex()
         val newPhoto = getCachedPhotoBySha1(
             this._context,
             oldPhoto.fileName,
             oldPhoto.mimeType,
-            sha1.hash.hex(),
+            newSha1,
             mutableMapOf(this::class to handle)
         ) ?: throw IOException("Cannot read from newly created photo")
         oldPhoto.handles.remove(this::class)
@@ -248,21 +246,31 @@ class LocalStorageClient private constructor(
          */
         public suspend fun authenticate(
             context: StorageManagerActivity,
-            permissionLauncher: SuspendableLauncher<String, Boolean>?,
+            permissionLauncher: SuspendableLauncher<Array<String>, Map<String, Boolean>>?,
             intentSenderLauncher: SuspendableLauncher<IntentSenderRequest, ActivityResult>
         ): LocalStorageClient? {
-            val permission =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES
-                else Manifest.permission.READ_EXTERNAL_STORAGE
-            val checkPermissionResult = ContextCompat.checkSelfPermission(context, permission)
-            if (checkPermissionResult == PackageManager.PERMISSION_GRANTED) {
+            val permissions =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) arrayOf(
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.ACCESS_MEDIA_LOCATION
+                )
+                else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) arrayOf(
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.ACCESS_MEDIA_LOCATION
+                )
+                else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+            val checkPermissionResult = permissions.all {
+                ContextCompat.checkSelfPermission(context, it) ==
+                PackageManager.PERMISSION_GRANTED
+            }
+            if (checkPermissionResult) {
                 return LocalStorageClient(context, intentSenderLauncher)
             }
             else if (permissionLauncher == null) {
                 return null
             }
             else {
-                val isGranted = permissionLauncher.launch(permission)
+                val isGranted = permissionLauncher.launch(permissions).values.all { it }
                 return if (isGranted) LocalStorageClient(context, intentSenderLauncher) else null
             }
         }
