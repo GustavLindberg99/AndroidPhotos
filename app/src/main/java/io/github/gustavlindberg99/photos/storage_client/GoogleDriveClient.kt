@@ -293,7 +293,8 @@ class GoogleDriveClient private constructor(
         val cachedThumbnailUri = getCachedThumbnailBySha1(
             this._context,
             sha1,
-            UriHandle(remoteThumbnailUri)
+            UriHandle(remoteThumbnailUri),
+            metadata.rotation
         ) ?: return null
         return Photo(
             file.name,

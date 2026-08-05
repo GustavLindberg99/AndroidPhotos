@@ -380,7 +380,7 @@ class OneDriveStorageClient private constructor(
          */
         public suspend fun authenticate(context: Activity, allowSignIn: Boolean) {
             if (allowSignIn || signedIn(context)) {
-                createClient(context, LOGIN_TIMEOUT)
+                createClient(context, Long.MAX_VALUE)
             }
         }
 

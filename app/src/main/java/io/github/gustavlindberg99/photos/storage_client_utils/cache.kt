@@ -17,6 +17,7 @@ import io.github.gustavlindberg99.photos.photo.Photo
 import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import io.github.gustavlindberg99.photos.storage_client.PCloudClient
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
+import io.github.gustavlindberg99.photos.utils.calculateInSampleSize
 import io.github.gustavlindberg99.photos.utils.makeGeoPoint
 import io.github.gustavlindberg99.photos.utils.rotate
 import io.github.gustavlindberg99.photos.utils.toJsonObjectList
@@ -40,6 +41,7 @@ private const val VERSION = "version"
 private const val DATA = "data"
 private const val WIDTH = "width"
 private const val HEIGHT = "height"
+private const val ROTATION = "rotation"
 private const val LATITUDE = "latitude"
 private const val LONGITUDE = "longitude"
 private const val DATE_TIME = "dateTime"
@@ -57,7 +59,7 @@ private const val PHOTOS_FILE = "photos.json"
  * @param context   The context of the application.
  * @param sha1      The SHA1 checksum of the photo, used as a key for the cache.
  * @param handle    The handle of the photo.
- * @param bytes     The bytes of the photo that can be used to create the cache. If null, downloads the entire photo from the given URI.
+ * @param rotation  The rotation of the photo.
  *
  * @return The URI of the cached thumbnail, or null if the given URIs point to an invalid photo.
  */
@@ -65,27 +67,23 @@ public suspend fun getCachedThumbnailBySha1(
     context: StorageManagerActivity,
     sha1: String,
     handle: FileHandle,
-    bytes: ByteArray? = null
+    rotation: Int
 ): Uri? {
     val extension = File(handle.toString()).extension
     val thumbnailFile = context.cacheDir.resolve("$THUMBNAILS_DIR/$sha1.$extension")
 
     if (!thumbnailFile.exists()) {
-        val fetchedBytes = bytes ?: handle.getInputStream(context)
-            .useWithContext(Dispatchers.IO) { it.readBytes() }
-
-        // Extract EXIF data
-        val exifInterface = try {
-            fetchedBytes.inputStream().use { ExifInterface(it) }
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        handle.getInputStream(context).useWithContext(Dispatchers.IO) {
+            BitmapFactory.decodeStream(it, null, options)
         }
-        catch (_: IOException) {
-            return null
-        }
+        options.inSampleSize = calculateInSampleSize(options, 300, 300)
+        options.inJustDecodeBounds = false
 
-        val unrotatedThumbnail = exifInterface.thumbnailBitmap
-            ?: BitmapFactory.decodeByteArray(fetchedBytes, 0, fetchedBytes.size)
-            ?: return null
-        val thumbnail = unrotatedThumbnail.rotate(exifInterface.rotationDegrees)
+        val unrotatedThumbnail = handle.getInputStream(context).useWithContext(Dispatchers.IO) {
+            BitmapFactory.decodeStream(it, null, options)
+        } ?: return null
+        val thumbnail = unrotatedThumbnail.rotate(rotation)
 
         // Cache thumbnail
         thumbnailFile.parentFile?.mkdirs()
@@ -122,84 +120,98 @@ public suspend fun getCachedPhotoBySha1(
 
     val metadataFile = context.cacheDir.resolve("$METADATA_DIR/$sha1.json")
 
-    val width: Int
-    val height: Int
-    val location: GeoPoint?
-    val dateTime: String?
-    val timezone: String?
-    val thumbnailUri: Uri
+    if (metadataFile.exists()) {
+        val json = JSONObject(metadataFile.readText())
+        val width = json.getInt(WIDTH)
+        val height = json.getInt(HEIGHT)
 
-    if (!metadataFile.exists()) {
-        val bytes =
-            mainHandle.getInputStream(context).useWithContext(Dispatchers.IO) { it.readBytes() }
-        thumbnailUri =
-            getCachedThumbnailBySha1(context, sha1, mainHandle, bytes) ?: return null
-
-        // Extract EXIF data
-        val exifInterface = try {
-            bytes.inputStream().use { ExifInterface(it) }
-        }
-        catch (_: IOException) {
-            return null
-        }
-
-        width = exifInterface.getAttributeInt(ExifInterface.TAG_IMAGE_WIDTH, 0)
-        height = exifInterface.getAttributeInt(ExifInterface.TAG_IMAGE_LENGTH, 0)
-        if (width <= 0 || height <= 0) {
-            // Photo is invalid, skip it
-            return null
-        }
-
-        location = makeGeoPoint(exifInterface.latLong?.get(0), exifInterface.latLong?.get(1))
-        dateTime = (exifInterface.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
-            ?: exifInterface.getAttribute(ExifInterface.TAG_DATETIME))
-        timezone = exifInterface.getAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL)
-            ?: exifInterface.getAttribute(ExifInterface.TAG_OFFSET_TIME)
-
-        // Cache metadata
-        val json = JSONObject().apply {
-            put(WIDTH, width)
-            put(HEIGHT, height)
-            if (location != null) {
-                put(LATITUDE, location.latitude)
-                put(LONGITUDE, location.longitude)
+        // If the cache was created by an old version of the app, the rotation wasn't set. In that case, invalidate the cache and fetch everything again.
+        if (json.has(ROTATION)) {
+            val rotation = json.getInt(ROTATION)
+            val location = try {
+                GeoPoint(json.getDouble(LATITUDE), json.getDouble(LONGITUDE))
             }
-            if (dateTime != null) {
-                put(DATE_TIME, dateTime)
+            catch (_: JSONException) {
+                null
             }
-            if (timezone != null) {
-                put(TIMEZONE, timezone)
+            val dateTime = try {
+                json.getString(DATE_TIME)
             }
-        }
-        metadataFile.parentFile?.mkdirs()
-        metadataFile.outputStream().use { outputStream ->
-            outputStream.write(json.toString().toByteArray(Charsets.UTF_8))
+            catch (_: JSONException) {
+                null
+            }
+            val timezone = try {
+                json.getString(TIMEZONE)
+            }
+            catch (_: JSONException) {
+                null
+            }
+            val thumbnailUri =
+                getCachedThumbnailBySha1(context, sha1, mainHandle, rotation) ?: return null
+
+            return Photo(
+                fileName,
+                mimeType,
+                width,
+                height,
+                location,
+                sha1,
+                dateTime,
+                timezone,
+                thumbnailUri,
+                handles
+            )
         }
     }
-    else {
-        thumbnailUri = getCachedThumbnailBySha1(context, sha1, mainHandle) ?: return null
 
-        val json = JSONObject(metadataFile.readText())
-        width = json.getInt(WIDTH)
-        height = json.getInt(HEIGHT)
-        location = try {
-            GeoPoint(json.getDouble(LATITUDE), json.getDouble(LONGITUDE))
+    val bytes =
+        mainHandle.getInputStream(context).useWithContext(Dispatchers.IO) { it.readBytes() }
+
+    // Extract EXIF data
+    val exifInterface = try {
+        bytes.inputStream().use { ExifInterface(it) }
+    }
+    catch (_: IOException) {
+        return null
+    }
+
+    val width = exifInterface.getAttributeInt(ExifInterface.TAG_IMAGE_WIDTH, 0)
+    val height = exifInterface.getAttributeInt(ExifInterface.TAG_IMAGE_LENGTH, 0)
+    if (width <= 0 || height <= 0) {
+        // Photo is invalid, skip it
+        return null
+    }
+
+    val location = makeGeoPoint(exifInterface.latLong?.get(0), exifInterface.latLong?.get(1))
+    val rotation = exifInterface.rotationDegrees
+    val dateTime = (exifInterface.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
+        ?: exifInterface.getAttribute(ExifInterface.TAG_DATETIME))
+    val timezone = exifInterface.getAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL)
+        ?: exifInterface.getAttribute(ExifInterface.TAG_OFFSET_TIME)
+
+    val thumbnailUri =
+        getCachedThumbnailBySha1(context, sha1, mainHandle, rotation)
+            ?: return null
+
+    // Cache metadata
+    val json = JSONObject().apply {
+        put(WIDTH, width)
+        put(HEIGHT, height)
+        put(ROTATION, rotation)
+        if (location != null) {
+            put(LATITUDE, location.latitude)
+            put(LONGITUDE, location.longitude)
         }
-        catch (_: JSONException) {
-            null
+        if (dateTime != null) {
+            put(DATE_TIME, dateTime)
         }
-        dateTime = try {
-            json.getString(DATE_TIME)
+        if (timezone != null) {
+            put(TIMEZONE, timezone)
         }
-        catch (_: JSONException) {
-            null
-        }
-        timezone = try {
-            json.getString(TIMEZONE)
-        }
-        catch (_: JSONException) {
-            null
-        }
+    }
+    metadataFile.parentFile?.mkdirs()
+    metadataFile.outputStream().use { outputStream ->
+        outputStream.write(json.toString().toByteArray(Charsets.UTF_8))
     }
 
     return Photo(

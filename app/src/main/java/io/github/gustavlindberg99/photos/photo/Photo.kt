@@ -8,6 +8,8 @@ import android.net.Uri
 import android.util.Log
 import android.widget.ImageView
 import android.widget.Toast
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.lifecycleScope
@@ -26,6 +28,7 @@ import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import io.github.gustavlindberg99.photos.storage_client.OneDriveStorageClient
 import io.github.gustavlindberg99.photos.storage_client.PCloudClient
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
+import io.github.gustavlindberg99.photos.utils.calculateInSampleSize
 import io.github.gustavlindberg99.photos.utils.rotate
 import io.github.gustavlindberg99.photos.utils.toStringMap
 import kotlinx.coroutines.CancellationException
@@ -254,13 +257,16 @@ class Photo(
      * @throws IOException If the photo could not be fetched.
      */
     public suspend fun getThumbnail(context: Context): Bitmap = withContext(Dispatchers.IO) {
-        val bytes = context.contentResolver.openInputStream(this._thumbnailUri)
-            ?.use { it.readBytes() }
-            ?: throw IOException("No stream available")
-        val exifInterface = ExifInterface(bytes.inputStream())
-        val thumbnail =
-            exifInterface.thumbnailBitmap ?: BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        return@withContext thumbnail.rotate(exifInterface.rotationDegrees)
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(this._thumbnailUri)?.useWithContext(Dispatchers.IO) {
+            BitmapFactory.decodeStream(it, null, options)
+        }
+        options.inSampleSize = calculateInSampleSize(options, 300, 300)
+        options.inJustDecodeBounds = false
+        val thumbnail = context.contentResolver.openInputStream(this._thumbnailUri)
+            ?.useWithContext(Dispatchers.IO) { BitmapFactory.decodeStream(it, null, options) }
+            ?: AppCompatResources.getDrawable(context, R.drawable.baseline_warning_24)!!.toBitmap()
+        return@withContext thumbnail
     }
 
     /**

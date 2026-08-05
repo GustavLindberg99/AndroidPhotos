@@ -29,6 +29,7 @@ class ThumbnailView(
     private val _selectedMarker: ImageView by lazy { this.findViewById(R.id.ThumbnailView_selectedMarker) }
 
     private var _loadJob: Job? = null
+    private var _photo: Photo? = null
 
     init {
         View.inflate(context, R.layout.view_thumbnail, this)
@@ -49,6 +50,11 @@ class ThumbnailView(
      * @param photo The photo to set the thumbnail of.
      */
     public fun setPhoto(photo: Photo) {
+        if (photo == this._photo) {
+            return
+        }
+        this._photo = photo
+
         this._loadJob?.cancel()
         this._loadJob = (this.context as ComponentActivity).lifecycleScope.launch {
             this._thumbnail.setImageBitmap(photo.getThumbnail(context))
