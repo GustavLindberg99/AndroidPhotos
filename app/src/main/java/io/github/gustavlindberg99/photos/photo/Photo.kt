@@ -28,7 +28,7 @@ import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import io.github.gustavlindberg99.photos.storage_client.OneDriveStorageClient
 import io.github.gustavlindberg99.photos.storage_client.PCloudClient
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
-import io.github.gustavlindberg99.photos.utils.calculateInSampleSize
+import io.github.gustavlindberg99.photos.utils.readThumbnailBitmapFromInputStream
 import io.github.gustavlindberg99.photos.utils.rotate
 import io.github.gustavlindberg99.photos.utils.toStringMap
 import kotlinx.coroutines.CancellationException
@@ -256,17 +256,10 @@ class Photo(
      *
      * @throws IOException If the photo could not be fetched.
      */
-    public suspend fun getThumbnail(context: Context): Bitmap = withContext(Dispatchers.IO) {
-        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(this._thumbnailUri)?.useWithContext(Dispatchers.IO) {
-            BitmapFactory.decodeStream(it, null, options)
-        }
-        options.inSampleSize = calculateInSampleSize(options, 300, 300)
-        options.inJustDecodeBounds = false
-        val thumbnail = context.contentResolver.openInputStream(this._thumbnailUri)
-            ?.useWithContext(Dispatchers.IO) { BitmapFactory.decodeStream(it, null, options) }
+    public suspend fun getThumbnail(context: Context): Bitmap {
+        val inputStream = context.contentResolver.openInputStream(this._thumbnailUri)
+        return readThumbnailBitmapFromInputStream(inputStream)
             ?: AppCompatResources.getDrawable(context, R.drawable.baseline_warning_24)!!.toBitmap()
-        return@withContext thumbnail
     }
 
     /**

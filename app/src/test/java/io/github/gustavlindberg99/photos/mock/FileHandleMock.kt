@@ -9,7 +9,10 @@ data class FileHandleMock(public val name: String) : FileHandle {
     // In reality this wouldn't be a valid photo, but it's not a problem since the tests never assume the bytes are valid.
     public var contents = name.toByteArray()
 
-    public override suspend fun getInputStream(context: StorageManagerActivity): InputStream {
+    public override suspend fun getInputStream(
+        context: StorageManagerActivity,
+        range: LongRange?
+    ): InputStream {
         return this.contents.inputStream()
     }
 }

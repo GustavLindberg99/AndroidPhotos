@@ -21,6 +21,7 @@ import com.onedrive.sdk.extensions.IOneDriveClient
 import com.onedrive.sdk.extensions.Item
 import com.onedrive.sdk.extensions.OneDriveClient
 import com.onedrive.sdk.generated.IBaseItemRequestBuilder
+import com.onedrive.sdk.options.HeaderOption
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.OneDriveFileHandle
@@ -86,6 +87,7 @@ class OneDriveStorageClient private constructor(
     }
 
     public override fun getAllPhotos(): Flow<Photo> = flow { f ->
+        println("Hello World OneDrive")
         val request =
             if (photosFolder(this._context) == "") this.client().drive.root
             else this.client().drive.getItems(
@@ -187,13 +189,23 @@ class OneDriveStorageClient private constructor(
      * Gets the input stream of the file with the given ID.
      *
      * @param id    The ID of the file.
+     * @param range The range of the file to get. If null, the entire file is returned.
      *
      * @return The input stream of the file.
      *
      * @throws IOException If the file could not be retrieved.
      */
-    public suspend fun getInputStream(id: String): InputStream = withContext(Dispatchers.IO) {
-        return@withContext this.client().drive.getItems(id).content.buildRequest().get()
+    public suspend fun getInputStream(
+        id: String,
+        range: LongRange? = null
+    ): InputStream = withContext(Dispatchers.IO) {
+        val options = if (range != null) {
+            listOf(HeaderOption("Range", "bytes=${range.first}-${range.last}"))
+        }
+        else {
+            emptyList()
+        }
+        return@withContext this.client().drive.getItems(id).content.buildRequest(options).get()
     }
 
     /**

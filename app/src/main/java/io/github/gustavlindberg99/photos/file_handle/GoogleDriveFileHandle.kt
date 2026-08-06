@@ -9,8 +9,11 @@ data class GoogleDriveFileHandle(public val id: String) : FileHandle {
         return this.id
     }
 
-    public override suspend fun getInputStream(context: StorageManagerActivity): InputStream {
+    public override suspend fun getInputStream(
+        context: StorageManagerActivity,
+        range: LongRange?
+    ): InputStream {
         val client = context.storageClients().filterIsInstance<GoogleDriveClient>().first()
-        return client.getInputStream(this.id)
+        return client.getInputStream(this.id, range)
     }
 }

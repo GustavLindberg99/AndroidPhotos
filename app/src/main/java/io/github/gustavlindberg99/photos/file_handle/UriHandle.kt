@@ -21,18 +21,19 @@ data class UriHandle(private val _uri: Uri) : FileHandle {
     }
 
     public override suspend fun getInputStream(
-        context: StorageManagerActivity
+        context: StorageManagerActivity,
+        range: LongRange?
     ): InputStream = withContext(Dispatchers.IO) {
         // Run on IO thread to avoid strange crashes when changing between light and dark mode
-        if (this._uri.scheme in setOf("http", "https")) {
+        if (this.isLocal()) {
+            return@withContext context.contentResolver.openInputStream(this.uri())
+                ?: throw IOException("No stream available")
+        }
+        else {
             return@withContext HttpClient(Android) { expectSuccess = true }
                 .get(this._uri.toString())
                 .bodyAsChannel()
                 .toInputStream()
-        }
-        else {
-            return@withContext context.contentResolver.openInputStream(this.uri())
-                ?: throw IOException("No stream available")
         }
     }
 
@@ -43,7 +44,7 @@ data class UriHandle(private val _uri: Uri) : FileHandle {
      */
     public fun uri(): Uri {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-            && this@UriHandle._uri.scheme !in setOf("http", "https")
+            && this.isLocal()
             && this._uri.getQueryParameter("requireOriginal") == null
         ) {
             return MediaStore.setRequireOriginal(this._uri)
@@ -51,5 +52,14 @@ data class UriHandle(private val _uri: Uri) : FileHandle {
         else {
             return this._uri
         }
+    }
+
+    /**
+     * Gets whether the URI points to a local file.
+     *
+     * @return True if the URI points to a local file, false otherwise.
+     */
+    public fun isLocal(): Boolean {
+        return this._uri.scheme !in setOf("http", "https")
     }
 }

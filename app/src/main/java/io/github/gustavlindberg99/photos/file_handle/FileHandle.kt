@@ -12,10 +12,14 @@ interface FileHandle {
      * Gets the input stream for the file. Must be closed after use.
      *
      * @param context   The context to use.
+     * @param range     The minimum range of bytes to read (implementations can read more bytes than requested). If null, the entire file is read.
      *
      * @return The input stream for the file.
      *
      * @throws Exception If the input stream could not be retrieved.
      */
-    public suspend fun getInputStream(context: StorageManagerActivity): InputStream
+    public suspend fun getInputStream(
+        context: StorageManagerActivity,
+        range: LongRange? = null
+    ): InputStream
 }

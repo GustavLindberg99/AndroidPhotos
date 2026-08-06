@@ -9,8 +9,11 @@ data class PCloudFileHandle(public val id: Long) : FileHandle {
         return this.id.toString()
     }
 
-    public override suspend fun getInputStream(context: StorageManagerActivity): InputStream {
+    public override suspend fun getInputStream(
+        context: StorageManagerActivity,
+        range: LongRange?
+    ): InputStream {
         val client = context.storageClients().filterIsInstance<PCloudClient>().first()
-        return client.getInputStream(this.id)
+        return client.getInputStream(this.id, range)
     }
 }

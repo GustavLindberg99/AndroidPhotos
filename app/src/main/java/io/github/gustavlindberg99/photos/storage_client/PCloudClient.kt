@@ -17,6 +17,7 @@ import com.pcloud.sdk.AuthorizationActivity
 import com.pcloud.sdk.AuthorizationRequest
 import com.pcloud.sdk.AuthorizationResult
 import com.pcloud.sdk.DataSource
+import com.pcloud.sdk.DownloadOptions
 import com.pcloud.sdk.PCloudSdk
 import com.pcloud.sdk.RemoteFile
 import com.pcloud.sdk.RemoteFolder
@@ -28,6 +29,12 @@ import io.github.gustavlindberg99.photos.photo.Photo
 import io.github.gustavlindberg99.photos.photo.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPCloudSha1
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotoBySha1
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.android.Android
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import okio.ByteString
@@ -159,8 +166,20 @@ class PCloudClient private constructor(
      * @throws java.io.IOException If a network error occurred.
      * @throws ApiError If the file does not exist.
      */
-    public suspend fun getInputStream(id: Long): InputStream = withContext(Dispatchers.IO) {
-        return@withContext _apiClient.loadFile(id).execute().byteStream()
+    public suspend fun getInputStream(
+        id: Long,
+        range: LongRange? = null
+    ): InputStream = withContext(Dispatchers.IO) {
+        if (range == null) {
+            return@withContext _apiClient.loadFile(id).execute().byteStream()
+        }
+        val fileLink = _apiClient.createFileLink(id, DownloadOptions.DEFAULT).execute()
+        return@withContext HttpClient(Android) { expectSuccess = true }
+            .get(fileLink.bestUrl().toString()) {
+                header("Range", "bytes=${range.first}-${range.last}")
+            }
+            .bodyAsChannel()
+            .toInputStream()
     }
 
     /**

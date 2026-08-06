@@ -9,7 +9,10 @@ data class OneDriveFileHandle(public val id: String) : FileHandle {
         return this.id
     }
 
-    public override suspend fun getInputStream(context: StorageManagerActivity): InputStream {
+    public override suspend fun getInputStream(
+        context: StorageManagerActivity,
+        range: LongRange?
+    ): InputStream {
         val client = context.storageClients().filterIsInstance<OneDriveStorageClient>().first()
         return client.getInputStream(this.id)
     }

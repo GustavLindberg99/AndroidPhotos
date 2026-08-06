@@ -212,13 +212,21 @@ class GoogleDriveClient private constructor(
      * Gets the input stream of the file with the given ID.
      *
      * @param id    The ID of the file.
+     * @param range The range of the file to get. If null, the entire file is returned.
      *
      * @return The input stream of the file.
      *
      * @throws IOException If the file could not be retrieved.
      */
-    public suspend fun getInputStream(id: String): InputStream = withContext(Dispatchers.IO) {
-        return@withContext this._service.files().get(id).setAlt("media").executeMediaAsInputStream()
+    public suspend fun getInputStream(
+        id: String,
+        range: LongRange? = null
+    ): InputStream = withContext(Dispatchers.IO) {
+        val request = this._service.files().get(id).setAlt("media")
+        if (range != null) {
+            request.requestHeaders.range = "bytes=${range.first}-${range.last}"
+        }
+        return@withContext request.executeMediaAsInputStream()
     }
 
     /**
@@ -272,12 +280,13 @@ class GoogleDriveClient private constructor(
         // We need to get the full EXIF data to know the timezone, as for some reason the Google Drive API includes the time but not the timezone.
         val dateTime: String?
         val timezone: String?
+        val exifInterface: ExifInterface
         try {
             val response = _httpClient.get(uri.toString()) {
                 header("Range", "bytes=0-131071")
             }
             val headerBytes = response.body<ByteArray>()
-            val exifInterface = ExifInterface(headerBytes.inputStream())
+            exifInterface = ExifInterface(headerBytes.inputStream())
             dateTime = exifInterface.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
                 ?: exifInterface.getAttribute(ExifInterface.TAG_DATETIME)
             timezone = exifInterface.getAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL)
@@ -294,7 +303,8 @@ class GoogleDriveClient private constructor(
             this._context,
             sha1,
             UriHandle(remoteThumbnailUri),
-            metadata.rotation
+            metadata.rotation,
+            exifInterface
         ) ?: return null
         return Photo(
             file.name,
