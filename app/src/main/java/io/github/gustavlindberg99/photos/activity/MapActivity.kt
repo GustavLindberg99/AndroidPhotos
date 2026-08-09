@@ -5,9 +5,6 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.graphics.drawable.toDrawable
-import androidx.lifecycle.lifecycleScope
-import com.github.gustavlindberg99.androidsuspendutils.launch
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.databinding.ActivityMapBinding
 import io.github.gustavlindberg99.photos.photo.Media
@@ -57,16 +54,6 @@ class MapActivity : AppCompatActivity() {
             val marker = Marker(this._binding.map)
             marker.position = photo.location
             marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            this.lifecycleScope.launch {
-                try {
-                    val bitmap = photo.getThumbnail(this)
-                    marker.image = bitmap.toDrawable(resources)
-                    this._binding.map.invalidate()
-                }
-                catch (_: Exception) {
-                    // Ignore, the marker will just not have an image
-                }
-            }
             marker.setOnMarkerClickListener { _, _ ->
                 try {
                     val intent = Intent(this, PhotoActivity::class.java)

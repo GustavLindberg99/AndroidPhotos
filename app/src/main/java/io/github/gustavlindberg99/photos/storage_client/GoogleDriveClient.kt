@@ -33,7 +33,6 @@ import io.github.gustavlindberg99.photos.photo.Photo
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.GoogleDriveFileHandle
-import io.github.gustavlindberg99.photos.file_handle.UriHandle
 import io.github.gustavlindberg99.photos.metadata_parser.MetadataParser
 import io.github.gustavlindberg99.photos.metadata_parser.PhotoMetadataParser
 import io.github.gustavlindberg99.photos.metadata_parser.VideoMetadataParser
@@ -41,9 +40,10 @@ import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import io.github.gustavlindberg99.photos.photo.Video
 import io.github.gustavlindberg99.photos.storage_client_utils.PhotosFolderManager
-import io.github.gustavlindberg99.photos.storage_client_utils.getCachedThumbnailBySha1
 import io.github.gustavlindberg99.photos.data_source.HttpDataSource
 import io.github.gustavlindberg99.photos.data_source.HttpMediaDataSource
+import io.github.gustavlindberg99.photos.file_handle.UriHandle
+import io.github.gustavlindberg99.photos.storage_client_utils.getCachedThumbnailBySha1
 import io.github.gustavlindberg99.photos.utils.makeGeoPoint
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -333,13 +333,15 @@ class GoogleDriveClient private constructor(
                 metadataParser.location()?.longitude
             )
             val remoteThumbnailUri = file.thumbnailLink?.toUri() ?: uri
-            val cachedThumbnailUri = getCachedThumbnailBySha1(
+
+            // Cache thumbnail here for performance reasons
+            getCachedThumbnailBySha1(
                 this._context,
                 sha1,
                 UriHandle(remoteThumbnailUri),
                 metadataParser.rotation(),
                 metadataParser
-            ) ?: return@withContext null
+            )
 
             when (metadataParser) {
                 is PhotoMetadataParser -> {
@@ -348,11 +350,11 @@ class GoogleDriveClient private constructor(
                         file.mimeType,
                         metadataParser.width() ?: return@withContext null,
                         metadataParser.height() ?: return@withContext null,
+                        metadataParser.rotation(),
                         location,
                         sha1,
                         metadataParser.dateTime(),
                         metadataParser.timezone(),
-                        cachedThumbnailUri,
                         mutableMapOf(GoogleDriveClient::class to GoogleDriveFileHandle(file.id))
                     )
                 }
@@ -363,11 +365,11 @@ class GoogleDriveClient private constructor(
                         file.mimeType,
                         metadataParser.width() ?: return@withContext null,
                         metadataParser.height() ?: return@withContext null,
+                        metadataParser.rotation(),
                         metadataParser.duration() ?: return@withContext null,
                         location,
                         sha1,
                         metadataParser.dateTime(),
-                        cachedThumbnailUri,
                         mutableMapOf(GoogleDriveClient::class to GoogleDriveFileHandle(file.id))
                     )
                 }

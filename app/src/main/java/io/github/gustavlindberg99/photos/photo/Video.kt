@@ -5,7 +5,6 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaMetadataRetriever
 import android.media.MediaMuxer
-import android.net.Uri
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.lifecycle.lifecycleScope
@@ -46,7 +45,6 @@ import kotlin.reflect.KClass
  * @param location      The geographical location at which the photo was taken, or null if unknown.
  * @param sha1          The SHA1 checksum of the photo, used for checking for equality.
  * @param _dateTime     The date and time the photo was taken in `yyyy:MM:dd HH:mm:ss` format, or null if unknown.
- * @param thumbnailUri  The URI of the thumbnail of the photo. Must be a local URI (usually a cache file).
  * @param handles       A map with storage client types as keys, and the file handle for that storage client as values.
  */
 class Video(
@@ -54,13 +52,13 @@ class Video(
     mimeType: String,
     width: Int,
     height: Int,
+    rotation: Int,
     public val duration: Long,
     location: GeoPoint?,
     sha1: String,
     private val _dateTime: String?,
-    thumbnailUri: Uri,
     handles: MutableMap<KClass<out StorageClient>, FileHandle>
-) : Media(fileName, mimeType, width, height, location, sha1, thumbnailUri, handles) {
+) : Media(fileName, mimeType, width, height, rotation, location, sha1, handles) {
     public override fun dateTime(): Date? {
         try {
             return SimpleDateFormat("yyyyMMdd'T'HHmmss.SSSX", Locale.US)

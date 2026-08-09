@@ -1,6 +1,5 @@
 package io.github.gustavlindberg99.photos
 
-import android.net.Uri
 import io.github.gustavlindberg99.photos.metadata_parser.PhotoMetadataParser
 import io.github.gustavlindberg99.photos.mock.StorageManagerActivityMock
 import io.github.gustavlindberg99.photos.mock.FileHandleMock
@@ -43,11 +42,11 @@ class PhotoMetadataTest {
             "image/jpeg",
             metadataParser.width()!!,
             metadataParser.height()!!,
+            metadataParser.rotation(),
             metadataParser.location(),
             "5d22e5a99daf5a2683b845b43959feb52bfbec14",
             metadataParser.dateTime(),
             metadataParser.timezone(),
-            Uri.EMPTY,
             mutableMapOf(StorageClientMock::class to handle)
         )
 
@@ -75,11 +74,11 @@ class PhotoMetadataTest {
             "image/jpeg",
             metadataParser.width()!!,
             metadataParser.height()!!,
+            metadataParser.rotation(),
             metadataParser.location(),
             "5d22e5a99daf5a2683b845b43959feb52bfbec14",
             metadataParser.dateTime(),
             metadataParser.timezone(),
-            Uri.EMPTY,
             mutableMapOf(StorageClientMock::class to handle)
         )
 
@@ -107,11 +106,11 @@ class PhotoMetadataTest {
             "image/jpeg",
             metadataParser.width()!!,
             metadataParser.height()!!,
+            metadataParser.rotation(),
             metadataParser.location(),
             "5d22e5a99daf5a2683b845b43959feb52bfbec14",
             metadataParser.dateTime(),
             metadataParser.timezone(),
-            Uri.EMPTY,
             mutableMapOf(StorageClientMock::class to handle)
         )
 

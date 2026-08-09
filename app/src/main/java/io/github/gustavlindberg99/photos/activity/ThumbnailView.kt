@@ -1,12 +1,10 @@
 package io.github.gustavlindberg99.photos.activity
 
-import android.app.Activity
 import android.content.Context
 import android.util.AttributeSet
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
-import androidx.activity.ComponentActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.flexbox.FlexboxLayoutManager
@@ -55,13 +53,14 @@ class ThumbnailView(
         }
         this._photo = photo
 
+        val context = this.context as StorageManagerActivity
         this._loadJob?.cancel()
-        this._loadJob = (this.context as ComponentActivity).lifecycleScope.launch {
+        this._loadJob = context.lifecycleScope.launch {
             this._thumbnail.setImageBitmap(photo.getThumbnail(context))
         }
 
         val windowInsets = ViewCompat.getRootWindowInsets(this)
-            ?: ViewCompat.getRootWindowInsets((this.context as Activity).window.decorView)!! // Can only be null on API 20 and below
+            ?: ViewCompat.getRootWindowInsets(context.window.decorView)!! // Can only be null on API 20 and below
         val systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
         val insetsWidth = systemBars.left + systemBars.right
         val availableWidth = this.resources.displayMetrics.widthPixels - insetsWidth

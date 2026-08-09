@@ -1,8 +1,6 @@
 package io.github.gustavlindberg99.photos.mock
 
 import android.content.Context
-import androidx.annotation.VisibleForTesting
-import androidx.core.net.toUri
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import com.github.gustavlindberg99.androidsuspendutils.flow
@@ -67,11 +65,11 @@ class StorageClientMock(private val _context: Context) : StorageClient {
             oldPhoto.mimeType,
             oldPhoto.width,
             oldPhoto.height,
+            0,
             oldPhoto.location,
             sha1,
             null,
             null,
-            "file://fake-filesystem/thumbnails/photo.jpg".toUri(),
             mutableMapOf(this::class to handle)
         )
         PhotoManager.update(this._context, oldPhoto)

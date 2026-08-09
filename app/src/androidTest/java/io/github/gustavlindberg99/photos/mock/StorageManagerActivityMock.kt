@@ -17,6 +17,6 @@ class StorageManagerActivityMock(private val _context: Context) : StorageManager
     }
 
     public override suspend fun storageClients(): Set<StorageClient> {
-        return setOf(DummyStorageClient())
+        return emptySet()
     }
 }

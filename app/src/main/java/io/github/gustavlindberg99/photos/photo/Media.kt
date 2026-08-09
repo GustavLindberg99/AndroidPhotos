@@ -5,7 +5,6 @@ package io.github.gustavlindberg99.photos.photo
 import android.content.Context
 import android.graphics.Bitmap
 import android.location.Geocoder
-import android.net.Uri
 import android.util.Log
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.graphics.drawable.toBitmap
@@ -23,6 +22,7 @@ import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import io.github.gustavlindberg99.photos.storage_client.OneDriveStorageClient
 import io.github.gustavlindberg99.photos.storage_client.PCloudClient
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
+import io.github.gustavlindberg99.photos.storage_client_utils.getCachedThumbnailBySha1
 import io.github.gustavlindberg99.photos.utils.readThumbnailBitmapFromInputStream
 import io.github.gustavlindberg99.photos.utils.toStringMap
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +42,6 @@ import kotlin.text.trim
  * @param height        The height of the photo in pixels.
  * @param location      The geographical location at which the photo was taken, or null if unknown.
  * @param sha1          The SHA1 checksum of the photo, used for checking for equality.
- * @param _thumbnailUri The URI of the thumbnail of the photo. Must be a local URI (usually a cache file).
  * @param handles       A map with storage client types as keys, and the file handle for that storage client as values.
  */
 abstract sealed class Media(
@@ -50,9 +49,9 @@ abstract sealed class Media(
     public val mimeType: String,
     public val width: Int,
     public val height: Int,
+    private val _rotation: Int,
     public val location: GeoPoint?,
     public val sha1: String,
-    private val _thumbnailUri: Uri,
     public val handles: MutableMap<KClass<out StorageClient>, FileHandle>
 ) : Comparable<Media> {
     public override fun equals(other: Any?): Boolean {
@@ -118,9 +117,8 @@ abstract sealed class Media(
      * @throws NoSuchElementException If the photo has been deleted from all storage services.
      */
     public suspend fun getInputStream(context: StorageManagerActivity): InputStream {
-        val clients = context.storageClients().filter { it::class in this.handles }
-        val client = clients.firstOrNull { it is LocalStorageClient } ?: clients.first()
-        return this.handles[client::class]!!.getInputStream(context)
+        val handle = this.handles[LocalStorageClient::class] ?: this.handles.values.first()
+        return handle.getInputStream(context)
     }
 
     /**
@@ -130,10 +128,25 @@ abstract sealed class Media(
      *
      * @throws IOException If the photo could not be fetched.
      */
-    public suspend fun getThumbnail(context: Context): Bitmap {
-        val inputStream = context.contentResolver.openInputStream(this._thumbnailUri)
-        return readThumbnailBitmapFromInputStream(inputStream)
-            ?: AppCompatResources.getDrawable(context, R.drawable.baseline_warning_24)!!.toBitmap()
+    public suspend fun getThumbnail(context: StorageManagerActivity): Bitmap {
+        val errorDrawable =
+            AppCompatResources.getDrawable(context, R.drawable.baseline_warning_24)!!.toBitmap()
+        val handle = this.handles[LocalStorageClient::class] ?: this.handles.values.first()
+        val uri = getCachedThumbnailBySha1(
+            context,
+            this.sha1,
+            handle,
+            this._rotation,
+            null
+        ) ?: return errorDrawable
+        val inputStream = try {
+            context.contentResolver.openInputStream(uri)
+        }
+        catch (e: Exception) {
+            Log.w(this.javaClass.name, e.message, e)
+            return errorDrawable
+        }
+        return readThumbnailBitmapFromInputStream(inputStream) ?: errorDrawable
     }
 
     /**
@@ -189,12 +202,12 @@ abstract sealed class Media(
             put(MIME_TYPE, mimeType)
             put(WIDTH, width)
             put(HEIGHT, height)
+            put(ROTATION, _rotation)
             if (location != null) {
                 put(LATITUDE, location.latitude)
                 put(LONGITUDE, location.longitude)
             }
             put(SHA1_CHECKSUM, sha1)
-            put(THUMBNAIL_URI, _thumbnailUri.toString())
             val handles = this@Media.handles
                 .mapKeys { it.key.qualifiedName!! }
                 .mapValues { it.value.toString() }
@@ -207,10 +220,10 @@ abstract sealed class Media(
         private const val MIME_TYPE = "mimeType"
         private const val WIDTH = "width"
         private const val HEIGHT = "height"
+        private const val ROTATION = "rotation"
         private const val LATITUDE = "latitude"
         private const val LONGITUDE = "longitude"
         private const val SHA1_CHECKSUM = "sha1Checksum"
-        private const val THUMBNAIL_URI = "thumbnailUri"
         private const val URIS = "uris"
         protected const val DATE_TIME = "dateTime"
         protected const val TIMEZONE = "timezone"
@@ -231,12 +244,12 @@ abstract sealed class Media(
             val mimeType = json.getString(MIME_TYPE)
             val width = json.getInt(WIDTH)
             val height = json.getInt(HEIGHT)
+            val rotation = json.getInt(ROTATION)
             val location =
                 if (json.has(LATITUDE) && json.has(LONGITUDE))
                     GeoPoint(json.getDouble(LATITUDE), json.getDouble(LONGITUDE))
                 else null
             val sha1 = json.getString(SHA1_CHECKSUM)
-            val thumbnailUri = json.getString(THUMBNAIL_URI).toUri()
             val handles = json.getJSONObject(URIS).toStringMap()
                 .mapKeys { Class.forName(it.key).asSubclass(StorageClient::class.java).kotlin }
                 .mapValues {
@@ -263,11 +276,11 @@ abstract sealed class Media(
                     mimeType,
                     width,
                     height,
+                    rotation,
                     duration,
                     location,
                     sha1,
                     dateTime,
-                    thumbnailUri,
                     handles.toMutableMap()
                 )
             }
@@ -277,11 +290,11 @@ abstract sealed class Media(
                     mimeType,
                     width,
                     height,
+                    rotation,
                     location,
                     sha1,
                     dateTime,
                     timezone,
-                    thumbnailUri,
                     handles.toMutableMap()
                 )
             }

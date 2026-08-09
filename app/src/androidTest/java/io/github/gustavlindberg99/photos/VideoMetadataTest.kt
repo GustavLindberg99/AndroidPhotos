@@ -5,9 +5,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.gustavlindberg99.photos.mock.ByteArrayDataSource
 import io.github.gustavlindberg99.photos.file_handle.UriHandle
 import io.github.gustavlindberg99.photos.metadata_parser.VideoMetadataParser
-import io.github.gustavlindberg99.photos.mock.DummyStorageClient
 import io.github.gustavlindberg99.photos.mock.StorageManagerActivityMock
 import io.github.gustavlindberg99.photos.photo.Video
+import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -48,12 +48,12 @@ class VideoMetadataTest {
             "video/mp4",
             metadataParser.width()!!,
             metadataParser.height()!!,
+            metadataParser.rotation(),
             metadataParser.duration()!!,
             metadataParser.location(),
             "e54dc1462fa8324704a47616b29ec4520b722b43",
             metadataParser.dateTime(),
-            Uri.EMPTY,
-            mutableMapOf(DummyStorageClient::class to handle)
+            mutableMapOf(LocalStorageClient::class to handle)
         )
 
         val rotation = 90
@@ -86,12 +86,12 @@ class VideoMetadataTest {
             "video/mp4",
             metadataParser.width()!!,
             metadataParser.height()!!,
+            metadataParser.rotation(),
             metadataParser.duration()!!,
             metadataParser.location(),
             "e54dc1462fa8324704a47616b29ec4520b722b43",
             metadataParser.dateTime(),
-            Uri.EMPTY,
-            mutableMapOf(DummyStorageClient::class to handle)
+            mutableMapOf(LocalStorageClient::class to handle)
         )
 
         val newLocation = GeoPoint(39.74, -104.99)

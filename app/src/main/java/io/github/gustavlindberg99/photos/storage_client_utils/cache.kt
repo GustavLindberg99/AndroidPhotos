@@ -150,8 +150,6 @@ public suspend fun getCachedPhotoBySha1(
             catch (_: JSONException) {
                 null
             }
-            val thumbnailUri =
-                getCachedThumbnailBySha1(context, sha1, mainHandle, rotation, null) ?: return null
 
             if (duration != null) {
                 return Video(
@@ -159,11 +157,11 @@ public suspend fun getCachedPhotoBySha1(
                     mimeType,
                     width,
                     height,
+                    rotation,
                     duration,
                     location,
                     sha1,
                     dateTime,
-                    thumbnailUri,
                     handles
                 )
             }
@@ -173,11 +171,11 @@ public suspend fun getCachedPhotoBySha1(
                     mimeType,
                     width,
                     height,
+                    rotation,
                     location,
                     sha1,
                     dateTime,
                     timezone,
-                    thumbnailUri,
                     handles
                 )
             }
@@ -219,8 +217,8 @@ public suspend fun getCachedPhotoBySha1(
     val location = metadataParser.location()
     val dateTime = metadataParser.dateTime()
 
-    val thumbnailUri =
-        getCachedThumbnailBySha1(context, sha1, mainHandle, rotation, metadataParser) ?: return null
+    // Cache thumbnail here for performance reasons
+    getCachedThumbnailBySha1(context, sha1, mainHandle, rotation, metadataParser)
 
     // Cache metadata
     val json = JSONObject().apply {
@@ -249,11 +247,11 @@ public suspend fun getCachedPhotoBySha1(
                 mimeType,
                 width,
                 height,
+                rotation,
                 location,
                 sha1,
                 dateTime,
                 timezone,
-                thumbnailUri,
                 handles
             )
         }
@@ -267,11 +265,11 @@ public suspend fun getCachedPhotoBySha1(
                 mimeType,
                 width,
                 height,
+                rotation,
                 duration,
                 location,
                 sha1,
                 dateTime,
-                thumbnailUri,
                 handles
             )
         }
