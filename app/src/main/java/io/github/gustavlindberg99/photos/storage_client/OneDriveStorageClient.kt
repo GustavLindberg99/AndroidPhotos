@@ -2,9 +2,14 @@ package io.github.gustavlindberg99.photos.storage_client
 
 import android.app.Activity
 import android.content.Context
+import android.net.Uri
 import android.util.Log
+import androidx.annotation.OptIn
 import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
 import com.github.gustavlindberg99.androidsuspendutils.async
 import com.github.gustavlindberg99.androidsuspendutils.flow
 import com.github.gustavlindberg99.androidsuspendutils.useWithContext
@@ -25,10 +30,15 @@ import com.onedrive.sdk.options.HeaderOption
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.OneDriveFileHandle
-import io.github.gustavlindberg99.photos.photo.Photo
-import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.photo.Media
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client_utils.PhotosFolderManager
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotoBySha1
+import io.github.gustavlindberg99.photos.data_source.HttpDataSource
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.request.header
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -86,8 +96,7 @@ class OneDriveStorageClient private constructor(
         return OneDriveStorageClient::class::qualifiedName.hashCode()
     }
 
-    public override fun getAllPhotos(): Flow<Photo> = flow { f ->
-        println("Hello World OneDrive")
+    public override fun getAllPhotos(): Flow<Media> = flow { f ->
         val request =
             if (photosFolder(this._context) == "") this.client().drive.root
             else this.client().drive.getItems(
@@ -120,7 +129,7 @@ class OneDriveStorageClient private constructor(
         return this.photosInFolder(request).map { OneDriveFileHandle(it.id) }.toSet()
     }
 
-    public override suspend fun save(photo: Photo) {
+    public override suspend fun save(photo: Media) {
         // Create the Pictures folder if it doesn't already exist
         val request =
             if (photosFolder(this._context) == "") this.client().drive.root
@@ -155,7 +164,7 @@ class OneDriveStorageClient private constructor(
         PhotoManager.update(this._context, photo)
     }
 
-    public override suspend fun overwrite(oldPhoto: Photo, newBytes: ByteArray): Photo {
+    public override suspend fun overwrite(oldPhoto: Media, newBytes: ByteArray): Media {
         val handle = oldPhoto.handles[this::class] as OneDriveFileHandle
         val client = this.client()
         val newFile: Item = awaitApiCall {
@@ -175,7 +184,7 @@ class OneDriveStorageClient private constructor(
         return PhotoManager.update(this._context, newPhoto)
     }
 
-    public override suspend fun delete(photo: Photo) {
+    public override suspend fun delete(photo: Media) {
         val handle = photo.handles[this::class] as OneDriveFileHandle
         val client = this.client()
         awaitApiCall {
@@ -183,6 +192,12 @@ class OneDriveStorageClient private constructor(
         }
         photo.handles.remove(this::class)
         PhotoManager.update(this._context, photo, delete = true)
+    }
+
+    @OptIn(UnstableApi::class)
+    public override suspend fun dataFactory(context: Context): DataSource.Factory {
+        val httpClient = this.httpClient()
+        return DataSource.Factory { HttpDataSource(httpClient) }
     }
 
     /**
@@ -206,6 +221,44 @@ class OneDriveStorageClient private constructor(
             emptyList()
         }
         return@withContext this.client().drive.getItems(id).content.buildRequest(options).get()
+    }
+
+    /**
+     * Gets the direct playback URI for the given file ID.
+     */
+    public suspend fun getPlaybackUri(id: String): Uri = withContext(Dispatchers.IO) {
+        val client = this.client()
+        // Use the longer UPLOAD_TIMEOUT here instead of the default/short one
+        val item: Item = awaitApiCall(UPLOAD_TIMEOUT) {
+            client.drive.getItems(id).buildRequest().get(it)
+        } ?: throw IOException("Failed to get item metadata")
+
+        // The direct download URL is usually in the raw JSON
+        val downloadUrl = item.rawObject?.get("@microsoft.graph.downloadUrl")?.asString
+            ?: item.rawObject?.get("@content.downloadUrl")?.asString
+
+        val uri = downloadUrl?.toUri()
+            ?: "https://api.onedrive.com/v1.0/drive/items/$id/content".toUri()
+
+        // LOG THIS to see if we are getting the direct link or the fallback
+        println("OneDrive Playback URI: $uri")
+
+        return@withContext uri
+    }
+
+    /**
+     * Gets the size of the file with the given ID.
+     *
+     * @param id    The ID of the file.
+     *
+     * @return The size of the file.
+     */
+    public suspend fun getSize(id: String): Long = withContext(Dispatchers.IO) {
+        val client = this.client()
+        val item: Item = awaitApiCall {
+            client.drive.getItems(id).buildRequest().get(it)
+        } ?: throw IOException("Failed to get item metadata")
+        item.size ?: 0L
     }
 
     /**
@@ -257,6 +310,21 @@ class OneDriveStorageClient private constructor(
         }
         this._clientPromise = promise
         return promise.await()
+    }
+
+    /**
+     * Gets an HTTP client to make authenticated requests to OneDrive.
+     *
+     * @return The HTTP client.
+     */
+    private suspend fun httpClient(): HttpClient {
+        val token = this.client().authenticator.accountInfo.accessToken
+        return HttpClient(Android) {
+            expectSuccess = true
+            defaultRequest {
+                header("Authorization", "Bearer $token")
+            }
+        }
     }
 
     companion object : StorageClient.Companion {

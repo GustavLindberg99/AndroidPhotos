@@ -8,7 +8,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.lifecycleScope
 import com.github.gustavlindberg99.androidsuspendutils.async
-import io.github.gustavlindberg99.photos.photo.Photo
+import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Deferred
@@ -20,10 +20,10 @@ import kotlin.reflect.full.companionObjectInstance
 object UploadManager : LifecycleOwner {
     // LinkedHashSet preserves both insertion order and uniqueness of elements
     private val _queuedUploads =
-        mutableMapOf<KClass<out StorageClient>, LinkedHashMap<Photo, MutableSet<CancellableContinuation<Unit>>>>()
+        mutableMapOf<KClass<out StorageClient>, LinkedHashMap<Media, MutableSet<CancellableContinuation<Unit>>>>()
     private val _currentUploads =
-        mutableMapOf<KClass<out StorageClient>, MutableMap<Photo, Deferred<Photo>>>()
-    private val _stateChangedListeners = mutableSetOf<(Photo, StorageClient, UploadState) -> Unit>()
+        mutableMapOf<KClass<out StorageClient>, MutableMap<Media, Deferred<Media>>>()
+    private val _stateChangedListeners = mutableSetOf<(Media, StorageClient, UploadState) -> Unit>()
 
     public override val lifecycle = LifecycleRegistry(this)
 
@@ -55,7 +55,7 @@ object UploadManager : LifecycleOwner {
      *
      * @throws Exception If the upload failed.
      */
-    public suspend fun save(client: StorageClient, photo: Photo) {
+    public suspend fun save(client: StorageClient, photo: Media) {
         this.upload(client, photo, {
             client.save(photo)
             return@upload photo
@@ -71,7 +71,7 @@ object UploadManager : LifecycleOwner {
      *
      * @throws Exception If the upload failed.
      */
-    public suspend fun overwrite(client: StorageClient, photo: Photo, newBytes: ByteArray): Photo {
+    public suspend fun overwrite(client: StorageClient, photo: Media, newBytes: ByteArray): Media {
         return this.upload(client, photo, { client.overwrite(photo, newBytes) })
     }
 
@@ -86,9 +86,9 @@ object UploadManager : LifecycleOwner {
      */
     private suspend fun upload(
         client: StorageClient,
-        photo: Photo,
-        action: suspend () -> Photo
-    ): Photo {
+        photo: Media,
+        action: suspend () -> Media
+    ): Media {
         val currentUploads = this._currentUploads[client::class] ?: mutableMapOf()
         this._currentUploads[client::class] = currentUploads
         val pendingUploads = this._queuedUploads[client::class] ?: LinkedHashMap()
@@ -147,7 +147,7 @@ object UploadManager : LifecycleOwner {
      *
      * @param client    The client to get the photos for.
      */
-    public fun queuedUploads(client: StorageClient): Set<Photo> {
+    public fun queuedUploads(client: StorageClient): Set<Media> {
         return this._queuedUploads[client::class]?.keys ?: emptySet()
     }
 
@@ -156,7 +156,7 @@ object UploadManager : LifecycleOwner {
      *
      * @param client    The client to get the photos for.
      */
-    public fun currentUploads(client: StorageClient): Set<Photo> {
+    public fun currentUploads(client: StorageClient): Set<Media> {
         return this._currentUploads[client::class]?.keys ?: emptySet()
     }
 
@@ -165,7 +165,7 @@ object UploadManager : LifecycleOwner {
      *
      * @param listener  The listener to set.
      */
-    public fun setStateChangedListener(listener: (Photo, StorageClient, UploadState) -> Unit) {
+    public fun setStateChangedListener(listener: (Media, StorageClient, UploadState) -> Unit) {
         this._stateChangedListeners.add(listener)
     }
 
@@ -174,7 +174,7 @@ object UploadManager : LifecycleOwner {
      *
      * @param listener  The listener to remove.
      */
-    public fun removeStateChangedListener(listener: (Photo, StorageClient, UploadState) -> Unit) {
+    public fun removeStateChangedListener(listener: (Media, StorageClient, UploadState) -> Unit) {
         this._stateChangedListeners.remove(listener)
     }
 

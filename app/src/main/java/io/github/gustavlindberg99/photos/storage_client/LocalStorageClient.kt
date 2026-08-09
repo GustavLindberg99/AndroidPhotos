@@ -4,23 +4,28 @@ import android.Manifest
 import android.app.RecoverableSecurityException
 import android.content.ContentUris
 import android.content.ContentValues
+import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.core.content.ContextCompat
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DefaultDataSource
 import com.github.gustavlindberg99.androidsuspendutils.SuspendableLauncher
 import com.github.gustavlindberg99.androidsuspendutils.flow
 import com.github.gustavlindberg99.androidsuspendutils.useWithContext
 import com.github.gustavlindberg99.androidsuspendutils.withContext
-import io.github.gustavlindberg99.photos.photo.Photo
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.UriHandle
-import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.photo.Media
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
+import io.github.gustavlindberg99.photos.photo.Video
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotoBySha1
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -51,7 +56,7 @@ class LocalStorageClient private constructor(
         return LocalStorageClient::class::qualifiedName.hashCode()
     }
 
-    public override fun getAllPhotos(): Flow<Photo> = flow { f ->
+    public override fun getAllPhotos(): Flow<Media> = flow { f ->
         for ((fileName, mimeType, uri) in this.allMediaEntries()) {
             val sha1 = HashingSink.sha1(blackholeSink())
             try {
@@ -63,13 +68,19 @@ class LocalStorageClient private constructor(
                 // This race condition can happen after deleting a file. If it happens, ignore it, since it means the file is deleted.
                 continue
             }
-            val photo = getCachedPhotoBySha1(
-                this._context,
-                fileName,
-                mimeType,
-                sha1.hash.hex(),
-                mutableMapOf(LocalStorageClient::class to UriHandle(uri))
-            ) ?: continue
+            val photo = try {
+                getCachedPhotoBySha1(
+                    this._context,
+                    fileName,
+                    mimeType,
+                    sha1.hash.hex(),
+                    mutableMapOf(LocalStorageClient::class to UriHandle(uri))
+                ) ?: continue
+            }
+            catch (e: Exception) {
+                Log.w(this.javaClass.name, e.message, e)
+                continue
+            }
             f.emit(photo)
         }
     }
@@ -78,12 +89,13 @@ class LocalStorageClient private constructor(
         return this.allMediaEntries().map { UriHandle(it.third) }.toSet()
     }
 
-    public override suspend fun save(photo: Photo) {
+    public override suspend fun save(photo: Media) {
         val contentValues = ContentValues()
-        contentValues.put(MediaStore.Images.Media.DISPLAY_NAME, photo.fileName)
-        contentValues.put(MediaStore.Images.Media.MIME_TYPE, photo.mimeType)
-        if (photo.dateTime != null) {
-            contentValues.put(MediaStore.Images.Media.DATE_TAKEN, photo.dateTime.time)
+        contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, photo.fileName)
+        contentValues.put(MediaStore.MediaColumns.MIME_TYPE, photo.mimeType)
+        val dateTime = photo.dateTime()
+        if (dateTime != null) {
+            contentValues.put(MediaStore.MediaColumns.DATE_TAKEN, dateTime.time)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             contentValues.put(
@@ -105,10 +117,15 @@ class LocalStorageClient private constructor(
             contentValues.put(MediaStore.MediaColumns.DATA, file.absolutePath)
         }
 
-        val collection =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val volume = MediaStore.VOLUME_EXTERNAL_PRIMARY
+            if (photo is Video) MediaStore.Video.Media.getContentUri(volume)
+            else MediaStore.Images.Media.getContentUri(volume)
+        }
+        else {
+            if (photo is Video) MediaStore.Video.Media.EXTERNAL_CONTENT_URI
             else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        }
 
         val uri = this._context.contentResolver.insert(collection, contentValues)
             ?: throw IOException("Failed to create new media entry")
@@ -129,7 +146,7 @@ class LocalStorageClient private constructor(
         PhotoManager.update(this._context, photo)
     }
 
-    public override suspend fun overwrite(oldPhoto: Photo, newBytes: ByteArray): Photo {
+    public override suspend fun overwrite(oldPhoto: Media, newBytes: ByteArray): Media {
         val handle = oldPhoto.handles[this::class] as UriHandle
 
         this.askForPermissionIfNeeded {
@@ -153,7 +170,7 @@ class LocalStorageClient private constructor(
         return PhotoManager.update(this._context, newPhoto)
     }
 
-    public override suspend fun delete(photo: Photo) {
+    public override suspend fun delete(photo: Media) {
         val handle = photo.handles[this::class] as UriHandle
 
         this.askForPermissionIfNeeded {
@@ -162,6 +179,10 @@ class LocalStorageClient private constructor(
 
         photo.handles.remove(this::class)
         PhotoManager.update(this._context, photo, delete = true)
+    }
+
+    public override suspend fun dataFactory(context: Context): DataSource.Factory {
+        return DefaultDataSource.Factory(context)
     }
 
     /**
@@ -199,36 +220,44 @@ class LocalStorageClient private constructor(
      */
     private suspend fun allMediaEntries(
     ): List<Triple<String, String, Uri>> = withContext(Dispatchers.IO) {
-        val projection = arrayOf(
-            MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.DISPLAY_NAME,
-            MediaStore.Images.Media.MIME_TYPE
-        )
-        val query = this._context.contentResolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            null,
-            null,
-            "${MediaStore.Images.Media.DATE_ADDED} DESC"
-        )
         val result = mutableListOf<Triple<String, String, Uri>>()
-        query?.use { cursor ->
-            while (cursor.moveToNext()) {
-                val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-                val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
-                val mimeTypeColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.MIME_TYPE)
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.MIME_TYPE
+        )
+        val collections = listOf(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        )
+        for (collection in collections) {
+            val query = this._context.contentResolver.query(
+                collection,
+                projection,
+                null,
+                null,
+                "${MediaStore.MediaColumns.DATE_ADDED} DESC"
+            )
+            query?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                    val nameColumn =
+                        cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                    val mimeTypeColumn =
+                        cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
 
-                val id = cursor.getLong(idColumn)
-                val fileName = cursor.getString(nameColumn)
-                val mimeType = cursor.getString(mimeTypeColumn)
-                val rawUri =
-                    ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
-                // Set extra permissions on newer Android versions. Older versions don't need this.
-                val uri =
-                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) rawUri
-                    else MediaStore.setRequireOriginal(rawUri)
+                    val id = cursor.getLong(idColumn)
+                    val fileName = cursor.getString(nameColumn)
+                    val mimeType = cursor.getString(mimeTypeColumn)
+                    val rawUri =
+                        ContentUris.withAppendedId(collection, id)
+                    // Set extra permissions on newer Android versions. Older versions don't need this.
+                    val uri =
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) rawUri
+                        else MediaStore.setRequireOriginal(rawUri)
 
-                result.add(Triple(fileName, mimeType, uri))
+                    result.add(Triple(fileName, mimeType, uri))
+                }
             }
         }
         return@withContext result
@@ -252,6 +281,7 @@ class LocalStorageClient private constructor(
             val permissions =
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) arrayOf(
                     Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO,
                     Manifest.permission.ACCESS_MEDIA_LOCATION
                 )
                 else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) arrayOf(

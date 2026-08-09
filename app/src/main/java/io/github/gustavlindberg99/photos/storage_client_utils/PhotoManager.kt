@@ -1,4 +1,4 @@
-package io.github.gustavlindberg99.photos.photo
+package io.github.gustavlindberg99.photos.storage_client_utils
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -11,11 +11,9 @@ import androidx.lifecycle.lifecycleScope
 import com.github.gustavlindberg99.androidsuspendutils.launch
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
+import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
-import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
-import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotos
-import io.github.gustavlindberg99.photos.storage_client_utils.setCachedPhotos
 import io.github.gustavlindberg99.photos.utils.addToStringSet
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -24,10 +22,10 @@ import java.util.Collections
 import kotlin.reflect.KClass
 
 object PhotoManager {
-    private var _allPhotos: MutableSet<Photo>? = null
+    private var _allPhotos: MutableSet<Media>? = null
 
-    private val _photoAdded = MutableSharedFlow<Photo>()
-    private val _photoRemoved = MutableSharedFlow<Photo>()
+    private val _photoAdded = MutableSharedFlow<Media>()
+    private val _photoRemoved = MutableSharedFlow<Media>()
 
     /**
      * Resets the photo manager by clearing all photos.
@@ -40,7 +38,7 @@ object PhotoManager {
     /**
      * Gets all photos.
      */
-    public suspend fun allPhotos(context: Context): Set<Photo> {
+    public suspend fun allPhotos(context: Context): Set<Media> {
         val allPhotos = this._allPhotos ?: getCachedPhotos(context)
         this._allPhotos = allPhotos
         return allPhotos
@@ -52,7 +50,7 @@ object PhotoManager {
      * @param context   The context to use.
      * @param listener  The listener to set. The listener will be called with the photo being added and its new index as parameters.
      */
-    public fun setPhotoAddedListener(context: ComponentActivity, listener: (Photo) -> Unit) {
+    public fun setPhotoAddedListener(context: ComponentActivity, listener: (Media) -> Unit) {
         this.setPhotoAddedListener(context, context, listener)
     }
 
@@ -66,9 +64,9 @@ object PhotoManager {
     public fun setPhotoAddedListener(
         context: Context,
         lifecycleOwner: LifecycleOwner,
-        listener: (Photo) -> Unit
+        listener: (Media) -> Unit
     ) {
-        val seen = mutableSetOf<Photo>()
+        val seen = mutableSetOf<Media>()
 
         // Run the callback on existing photos
         lifecycleOwner.lifecycleScope.launch {
@@ -99,7 +97,7 @@ object PhotoManager {
      *
      * @param listener  The listener to set. The listener will be called with the photo being removed and its old index as parameters.
      */
-    public fun setPhotoRemovedListener(context: LifecycleOwner, listener: (Photo) -> Unit) {
+    public fun setPhotoRemovedListener(context: LifecycleOwner, listener: (Media) -> Unit) {
         context.lifecycleScope.launch {
             this._photoRemoved.asSharedFlow().collect { listener(it) }
         }
@@ -116,10 +114,10 @@ object PhotoManager {
      */
     public suspend fun update(
         context: Context,
-        photo: Photo,
+        photo: Media,
         updateCache: Boolean = true,
         delete: Boolean = false
-    ): Photo {
+    ): Media {
         val collidingSha1s = this.allPhotos(context).any {
             it != photo && !Collections.disjoint(photo.handles.entries, it.handles.entries)
         }
@@ -130,7 +128,7 @@ object PhotoManager {
         val allPhotos = this._allPhotos ?: getCachedPhotos(context)
         this._allPhotos = allPhotos
 
-        val result: Photo
+        val result: Media
         if (photo.handles.isEmpty()) {
             allPhotos.remove(photo)
             _photoRemoved.emit(photo)
@@ -155,12 +153,12 @@ object PhotoManager {
     }
 
     /**
-     * Gets the updated photo. Useful if the original Photo object has been stored for a long time and might have changed since.
+     * Gets the updated photo. Useful if the original [Media] object has been stored for a long time and might have changed since.
      *
      * @param context   The context to use.
      * @param photo     The photo to get the updated version of.
      */
-    public suspend fun getUpdated(context: Context, photo: Photo): Photo {
+    public suspend fun getUpdated(context: Context, photo: Media): Media {
         return this.allPhotos(context).find { it == photo } ?: photo
     }
 
@@ -187,7 +185,7 @@ object PhotoManager {
      *
      * @throws IndexOutOfBoundsException If the index is out of bounds.
      */
-    public fun photoFromIndex(index: Int): Photo {
+    public fun photoFromIndex(index: Int): Media {
         return this._allPhotos?.elementAt(index)
             ?: throw IndexOutOfBoundsException("Getting photo from index before photos have been loaded")
     }
@@ -201,7 +199,7 @@ object PhotoManager {
      *
      * @throws NoSuchElementException If the photo is not in the list.
      */
-    public fun indexFromPhoto(photo: Photo): Int {
+    public fun indexFromPhoto(photo: Media): Int {
         val allPhotos = this._allPhotos
         val index = allPhotos?.indexOf(photo) ?: -1
         if (index == -1) {
@@ -298,7 +296,7 @@ object PhotoManager {
     private fun shouldAutoUpload(
         preferences: SharedPreferences,
         client: StorageClient,
-        photo: Photo
+        photo: Media
     ): Boolean {
         // If auto upload is disabled, skip
         val autoUpload = preferences.getBoolean(

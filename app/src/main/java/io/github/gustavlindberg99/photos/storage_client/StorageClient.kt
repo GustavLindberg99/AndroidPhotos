@@ -2,8 +2,9 @@ package io.github.gustavlindberg99.photos.storage_client
 
 import android.app.Activity
 import android.content.Context
+import androidx.media3.datasource.DataSource
 import io.github.gustavlindberg99.photos.file_handle.FileHandle
-import io.github.gustavlindberg99.photos.photo.Photo
+import io.github.gustavlindberg99.photos.photo.Media
 import kotlinx.coroutines.flow.Flow
 
 interface StorageClient {
@@ -22,7 +23,7 @@ interface StorageClient {
      *
      * @throws Exception If the photos could not be fetched.
      */
-    public fun getAllPhotos(): Flow<Photo>
+    public fun getAllPhotos(): Flow<Media>
 
     /**
      * Get all possible photo handles from the storage client. Some handles might not correspond to valid photos (they might correspond to folders or non-photo files), but all valid photos are guaranteed to be present. Used to invalidate cached photos that have been deleted.
@@ -40,7 +41,7 @@ interface StorageClient {
      *
      * @throws Exception If the photo could not be saved.
      */
-    public suspend fun save(photo: Photo)
+    public suspend fun save(photo: Media)
 
     /**
      * Overwrite a photo in the storage client. Assumes that the old and new photo both have the same MIME type.
@@ -52,7 +53,7 @@ interface StorageClient {
      *
      * @throws Exception If the photo could not be overwritten.
      */
-    public suspend fun overwrite(oldPhoto: Photo, newBytes: ByteArray): Photo
+    public suspend fun overwrite(oldPhoto: Media, newBytes: ByteArray): Media
 
     /**
      * Delete a photo from the storage client.
@@ -61,7 +62,16 @@ interface StorageClient {
      *
      * @throws Exception If the photo could not be deleted.
      */
-    public suspend fun delete(photo: Photo)
+    public suspend fun delete(photo: Media)
+
+    /**
+     * Gets a data source factory for the storage client.
+     *
+     * @param context   The context of the application.
+     *
+     * @return A data source factory.
+     */
+    public suspend fun dataFactory(context: Context): DataSource.Factory
 
     /**
      * Base interface for storage client companion objects.

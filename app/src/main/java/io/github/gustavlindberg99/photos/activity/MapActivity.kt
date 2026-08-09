@@ -10,14 +10,14 @@ import androidx.lifecycle.lifecycleScope
 import com.github.gustavlindberg99.androidsuspendutils.launch
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.databinding.ActivityMapBinding
-import io.github.gustavlindberg99.photos.photo.Photo
-import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.photo.Media
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import io.github.gustavlindberg99.photos.utils.initOsmdroid
 import org.osmdroid.views.overlay.Marker
 
 class MapActivity : AppCompatActivity() {
     private val _binding: ActivityMapBinding by lazy { ActivityMapBinding.inflate(this.layoutInflater) }
-    private val _markers = mutableMapOf<Photo, Marker>()
+    private val _markers = mutableMapOf<Media, Marker>()
 
     public override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,7 +52,7 @@ class MapActivity : AppCompatActivity() {
      *
      * @param photo The photo to add a marker for.
      */
-    private fun addMarker(photo: Photo) {
+    private fun addMarker(photo: Media) {
         if (photo.location != null) {
             val marker = Marker(this._binding.map)
             marker.position = photo.location
@@ -94,7 +94,7 @@ class MapActivity : AppCompatActivity() {
      *
      * @param photo The photo to remove the marker for.
      */
-    private fun removeMarker(photo: Photo) {
+    private fun removeMarker(photo: Media) {
         this._markers[photo]?.remove(this._binding.map)
         this._markers.remove(photo)
     }

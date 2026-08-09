@@ -70,4 +70,6 @@
     <string name="photoQueued">%s → %s\nQueued</string>
     <string name="photoUploading">%s → %s\nUploading</string>
     <string name="chooseTimezone">Choose timezone</string>
+    <string name="failedToPlayVideo">Failed to play video: %s</string>
+    <string name="duration">Duration: %d seconds</string>
 </resources>

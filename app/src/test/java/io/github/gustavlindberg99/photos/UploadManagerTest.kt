@@ -8,7 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.github.gustavlindberg99.androidsuspendutils.launch
 import io.github.gustavlindberg99.photos.mock.FileHandleMock
 import io.github.gustavlindberg99.photos.mock.StorageClientMock
-import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking

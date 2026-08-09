@@ -42,7 +42,7 @@ abstract class StorageManagerActivity : AppCompatActivity() {
     /**
      * Gets the available storage clients.
      */
-    public suspend fun storageClients(): Set<StorageClient> {
+    public open suspend fun storageClients(): Set<StorageClient> {
         val promises = this._promises ?: this.createClients()
         this._promises = promises
         return promises.mapNotNull { promise ->

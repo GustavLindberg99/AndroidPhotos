@@ -4,13 +4,16 @@ import android.app.Activity
 import android.app.PendingIntent
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.IntentSenderRequest
+import androidx.annotation.OptIn
 import androidx.core.net.toUri
-import androidx.exifinterface.media.ExifInterface
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
 import com.github.gustavlindberg99.androidsuspendutils.SuspendableLauncher
 import com.github.gustavlindberg99.androidsuspendutils.useWithContext
 import com.github.gustavlindberg99.androidsuspendutils.flow
@@ -31,14 +34,21 @@ import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.GoogleDriveFileHandle
 import io.github.gustavlindberg99.photos.file_handle.UriHandle
-import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.metadata_parser.MetadataParser
+import io.github.gustavlindberg99.photos.metadata_parser.PhotoMetadataParser
+import io.github.gustavlindberg99.photos.metadata_parser.VideoMetadataParser
+import io.github.gustavlindberg99.photos.photo.Media
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
+import io.github.gustavlindberg99.photos.photo.Video
 import io.github.gustavlindberg99.photos.storage_client_utils.PhotosFolderManager
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedThumbnailBySha1
+import io.github.gustavlindberg99.photos.data_source.HttpDataSource
+import io.github.gustavlindberg99.photos.data_source.HttpMediaDataSource
 import io.github.gustavlindberg99.photos.utils.makeGeoPoint
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.android.Android
-import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.request.HttpSendPipeline
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import kotlinx.coroutines.Dispatchers
@@ -59,8 +69,13 @@ class GoogleDriveClient private constructor(
 
     private val _httpClient = HttpClient(Android) {
         expectSuccess = true
-        defaultRequest {
-            header("Authorization", "Bearer $_token")
+    }
+
+    init {
+        this._httpClient.sendPipeline.intercept(HttpSendPipeline.State) {
+            if (context.url.host.contains("googleapis.com")) {
+                context.header("Authorization", "Bearer $_token")
+            }
         }
     }
 
@@ -128,7 +143,7 @@ class GoogleDriveClient private constructor(
         return GoogleDriveClient::class::qualifiedName.hashCode()
     }
 
-    public override fun getAllPhotos(): Flow<Photo> = flow { f ->
+    public override fun getAllPhotos(): Flow<Media> = flow { f ->
         val photosFolderId =
             if (photosFolder(this._context) == "") "root"
             else this._photosFolderManager.getPhotosFolder()?.id ?: return@flow
@@ -146,7 +161,7 @@ class GoogleDriveClient private constructor(
         return this.allPhotoFiles(photosFolderId).map { GoogleDriveFileHandle(it.id) }.toSet()
     }
 
-    public override suspend fun save(photo: Photo) {
+    public override suspend fun save(photo: Media) {
         // Create the Photos folder if it doesn't already exist
         val bytes =
             photo.getInputStream(this._context).useWithContext(Dispatchers.IO) { it.readBytes() }
@@ -178,7 +193,7 @@ class GoogleDriveClient private constructor(
         PhotoManager.update(this._context, photo)
     }
 
-    public override suspend fun overwrite(oldPhoto: Photo, newBytes: ByteArray): Photo {
+    public override suspend fun overwrite(oldPhoto: Media, newBytes: ByteArray): Media {
         val handle = oldPhoto.handles[this::class] as GoogleDriveFileHandle
         val newContent = ByteArrayContent(oldPhoto.mimeType, newBytes)
         val newFile = withContext(Dispatchers.IO) {
@@ -197,7 +212,7 @@ class GoogleDriveClient private constructor(
         return PhotoManager.update(this._context, newPhoto)
     }
 
-    public override suspend fun delete(photo: Photo) {
+    public override suspend fun delete(photo: Media) {
         val handle = photo.handles[this::class] as GoogleDriveFileHandle
         val content = File()
         content.trashed = true
@@ -206,6 +221,11 @@ class GoogleDriveClient private constructor(
         }
         photo.handles.remove(this::class)
         PhotoManager.update(this._context, photo, delete = true)
+    }
+
+    @OptIn(UnstableApi::class)
+    public override suspend fun dataFactory(context: Context): DataSource.Factory {
+        return DataSource.Factory { HttpDataSource(this._httpClient) }
     }
 
     /**
@@ -227,6 +247,18 @@ class GoogleDriveClient private constructor(
             request.requestHeaders.range = "bytes=${range.first}-${range.last}"
         }
         return@withContext request.executeMediaAsInputStream()
+    }
+
+    /**
+     * Gets the size of the file with the given ID.
+     *
+     * @param id    The ID of the file.
+     *
+     * @return The size of the file.
+     */
+    public suspend fun getSize(id: String): Long = withContext(Dispatchers.IO) {
+        @Suppress("UsePropertyAccessSyntax") // `file.getSize()` returns the file size (which is correct), whereas `file.size` returns the number of keys in the API's JSON response (which is wrong).
+        this._service.files().get(id).setFields("size").execute().getSize() ?: 0L
     }
 
     /**
@@ -273,51 +305,78 @@ class GoogleDriveClient private constructor(
     private suspend fun photoFromGoogleDriveFile(
         file: File,
         sha1: String = file.sha1Checksum
-    ): Photo? {
-        val metadata = file.imageMediaMetadata ?: return null
+    ): Media? = withContext(Dispatchers.IO) {
         val uri = this.idToUri(file.id)
 
-        // We need to get the full EXIF data to know the timezone, as for some reason the Google Drive API includes the time but not the timezone.
-        val dateTime: String?
-        val timezone: String?
-        val exifInterface: ExifInterface
         try {
-            val response = _httpClient.get(uri.toString()) {
-                header("Range", "bytes=0-131071")
+            val metadataParser: MetadataParser
+            if (file.mimeType.startsWith("video/")) {
+                @Suppress("UsePropertyAccessSyntax") // `file.getSize()` returns the file size (which is correct), whereas `file.size` returns the number of keys in the API's JSON response (which is wrong).
+                metadataParser = VideoMetadataParser(
+                    HttpMediaDataSource(
+                        this._httpClient,
+                        uri,
+                        file.getSize() ?: return@withContext null
+                    )
+                )
             }
-            val headerBytes = response.body<ByteArray>()
-            exifInterface = ExifInterface(headerBytes.inputStream())
-            dateTime = exifInterface.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
-                ?: exifInterface.getAttribute(ExifInterface.TAG_DATETIME)
-            timezone = exifInterface.getAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL)
-                ?: exifInterface.getAttribute(ExifInterface.TAG_OFFSET_TIME)
-        }
-        catch (_: Exception) {
-            return null
-        }
+            else {
+                val response = this._httpClient.get(uri.toString()) {
+                    header("Range", "bytes=0-131071")
+                }
+                val headerBytes = response.body<ByteArray>()
+                metadataParser = PhotoMetadataParser(headerBytes)
+            }
 
-        val location =
-            makeGeoPoint(metadata.location?.latitude, metadata.location?.longitude)
-        val remoteThumbnailUri = file.thumbnailLink?.toUri() ?: uri
-        val cachedThumbnailUri = getCachedThumbnailBySha1(
-            this._context,
-            sha1,
-            UriHandle(remoteThumbnailUri),
-            metadata.rotation,
-            exifInterface
-        ) ?: return null
-        return Photo(
-            file.name,
-            file.mimeType,
-            metadata.width,
-            metadata.height,
-            location,
-            sha1,
-            dateTime,
-            timezone,
-            cachedThumbnailUri,
-            mutableMapOf(GoogleDriveClient::class to GoogleDriveFileHandle(file.id))
-        )
+            val location = makeGeoPoint(
+                metadataParser.location()?.latitude,
+                metadataParser.location()?.longitude
+            )
+            val remoteThumbnailUri = file.thumbnailLink?.toUri() ?: uri
+            val cachedThumbnailUri = getCachedThumbnailBySha1(
+                this._context,
+                sha1,
+                UriHandle(remoteThumbnailUri),
+                metadataParser.rotation(),
+                metadataParser
+            ) ?: return@withContext null
+
+            when (metadataParser) {
+                is PhotoMetadataParser -> {
+                    return@withContext Photo(
+                        file.name,
+                        file.mimeType,
+                        metadataParser.width() ?: return@withContext null,
+                        metadataParser.height() ?: return@withContext null,
+                        location,
+                        sha1,
+                        metadataParser.dateTime(),
+                        metadataParser.timezone(),
+                        cachedThumbnailUri,
+                        mutableMapOf(GoogleDriveClient::class to GoogleDriveFileHandle(file.id))
+                    )
+                }
+
+                is VideoMetadataParser -> {
+                    return@withContext Video(
+                        file.name,
+                        file.mimeType,
+                        metadataParser.width() ?: return@withContext null,
+                        metadataParser.height() ?: return@withContext null,
+                        metadataParser.duration() ?: return@withContext null,
+                        location,
+                        sha1,
+                        metadataParser.dateTime(),
+                        cachedThumbnailUri,
+                        mutableMapOf(GoogleDriveClient::class to GoogleDriveFileHandle(file.id))
+                    )
+                }
+            }
+        }
+        catch (e: Exception) {
+            Log.w(this.javaClass.name, e.message, e)
+            return@withContext null
+        }
     }
 
     /**
@@ -341,7 +400,7 @@ class GoogleDriveClient private constructor(
 
         // The fields needed for photoFromGoogleDriveFile() to work properly
         private const val PHOTO_FIELDS =
-            "id, name, mimeType, thumbnailLink, imageMediaMetadata, sha1Checksum"
+            "id, name, mimeType, size, thumbnailLink, imageMediaMetadata, videoMediaMetadata, sha1Checksum"
 
         /**
          * Authenticates with Google Drive.

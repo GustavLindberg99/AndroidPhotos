@@ -28,12 +28,15 @@ import com.github.gustavlindberg99.androidsuspendutils.showAsync
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.checkbox.MaterialCheckBox
 import io.github.gustavlindberg99.photos.R
+import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.photo.Photo
-import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.photo.Video
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
 import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
 import io.github.gustavlindberg99.photos.utils.addToStringSet
+import io.github.gustavlindberg99.photos.utils.asTypeOrNull
 import io.github.gustavlindberg99.photos.utils.initOsmdroid
 import kotlinx.coroutines.Job
 import okio.ByteString.Companion.toByteString
@@ -56,6 +59,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
     private val _rotateRightButton: ImageButton by lazy { this.findViewById(R.id.PropertiesActivity_rotateRightButton) }
     private val _deleteButton: ImageButton by lazy { this.findViewById(R.id.PropertiesActivity_deleteButton) }
     private val _fileNameRow: TextView by lazy { this.findViewById(R.id.PropertiesActivity_fileNameRow) }
+    private val _durationRow: TextView by lazy { this.findViewById(R.id.PropertiesActivity_durationRow) }
     private val _dateTimeRow: TextView by lazy { this.findViewById(R.id.PropertiesActivity_dateTimeRow) }
     private val _noTimezoneRow: TextView by lazy { this.findViewById(R.id.PropertiesActivity_noTimezoneRow) }
     private val _changeTimezoneButton: Spinner by lazy { this.findViewById(R.id.PropertiesActivity_changeTimezoneButton) }
@@ -68,7 +72,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
 
     private val _storageCheckboxes = mutableMapOf<StorageClient, MaterialCheckBox>()
 
-    private val _selectedPhotos = mutableSetOf<Photo>()
+    private val _selectedPhotos = mutableSetOf<Media>()
 
     private var _getLocationJob: Job? = null
 
@@ -90,7 +94,9 @@ abstract class PropertiesActivity : StorageManagerActivity() {
                 _map.overlays.add(marker)
                 _map.invalidate()
                 lifecycleScope.launch {
-                    editPhotos { it.edit(this@PropertiesActivity, location = point) }
+                    editPhotos(this@PropertiesActivity._selectedPhotos) {
+                        it.edit(this@PropertiesActivity, location = point)
+                    }
                 }
                 return true
             }
@@ -128,10 +134,10 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         })
 
         this._rotateLeftButton.setOnClickListenerAsync {
-            this.editPhotos { it.edit(this, rotation = -90) }
+            this.editPhotos(this._selectedPhotos) { it.edit(this, rotation = -90) }
         }
         this._rotateRightButton.setOnClickListenerAsync {
-            this.editPhotos { it.edit(this, rotation = 90) }
+            this.editPhotos(this._selectedPhotos) { it.edit(this, rotation = 90) }
         }
 
         this._deleteButton.setOnClickListenerAsync {
@@ -145,7 +151,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
                 .setMessage(R.string.changeLocationConfirmation)
                 .showAsync(R.string.yes, R.string.no)
             if (proceed) {
-                this.editPhotos { it.edit(this, location = null) }
+                this.editPhotos(this._selectedPhotos) { it.edit(this, location = null) }
             }
         }
         this._cancelChangeLocationButton.setOnClickListener { this.updateUi() }
@@ -153,11 +159,12 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         this._changeTimezoneButton.setOnItemSelectedAsync { _, _, position, _ ->
             val newTimezone =
                 this._allTimezones.getOrNull(position) ?: return@setOnItemSelectedAsync
-            val oldTimezones = this._selectedPhotos.map { it.timezone }.toSet()
-            if (oldTimezones.size == 1) {
+            val selectedPhotos = this._selectedPhotos.asTypeOrNull<Photo>()
+            val oldTimezones = selectedPhotos?.map { it.timezone }?.toSet()
+            if (oldTimezones?.size == 1) {
                 val oldTimezone = oldTimezones.first()
                 if (newTimezone != oldTimezone) {
-                    this.editPhotos { it.edit(this, timezone = newTimezone) }
+                    this.editPhotos(selectedPhotos) { it.edit(this, timezone = newTimezone) }
                 }
             }
         }
@@ -217,7 +224,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
      *
      * @return True of the photo became selected, false if it became unselected.
      */
-    public open fun togglePhotoSelected(photo: Photo, updateUi: Boolean = true): Boolean {
+    public open fun togglePhotoSelected(photo: Media, updateUi: Boolean = true): Boolean {
         val result: Boolean
         if (this._selectedPhotos.contains(photo)) {
             this._selectedPhotos.remove(photo)
@@ -247,7 +254,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
      *
      * @return The selected photos.
      */
-    public fun selectedPhotos(): Set<Photo> {
+    public fun selectedPhotos(): Set<Media> {
         return this._selectedPhotos
     }
 
@@ -275,22 +282,41 @@ abstract class PropertiesActivity : StorageManagerActivity() {
             )
         }
 
+        // Update duration
+        if (this._selectedPhotos.size == 1) {
+            val photo = this._selectedPhotos.first()
+            if (photo is Video) {
+                this._durationRow.visibility = View.VISIBLE
+                this._durationRow.text = this.resources.getString(
+                    R.string.duration,
+                    photo.duration / 1000
+                )
+            }
+            else {
+                this._durationRow.visibility = View.GONE
+            }
+        }
+        else {
+            this._durationRow.visibility = View.GONE
+        }
+
         // Update date
-        // Reverse min and max because the Photo class considers photos with a later date to be first, since that's the order they're shown in
-        val minDate = this._selectedPhotos.max().dateTime
-        val maxDate = this._selectedPhotos.min().dateTime
+        // Reverse min and max because the Media class considers photos with a later date to be first, since that's the order they're shown in
+        val minDate = this._selectedPhotos.max().dateTime()
+        val maxDate = this._selectedPhotos.min().dateTime()
         if (minDate == maxDate) {
             this._dateTimeRow.text = this.getString(R.string.date, minDate.toString())
         }
         else {
             this._dateTimeRow.text = this.getString(R.string.date, "$minDate - $maxDate")
         }
-        val hasTimezone = this._selectedPhotos.all { it.hasTimezone }
+        val hasTimezone = this._selectedPhotos.all { it !is Photo || it.hasTimezone }
         this._noTimezoneRow.isVisible = !hasTimezone
 
         // Update timezone
-        val timezones = this._selectedPhotos.map { it.timezone }.toSet()
-        if (timezones.size == 1) {
+        val selectedPhotos = this._selectedPhotos.asTypeOrNull<Photo>()
+        val timezones = selectedPhotos?.map { it.timezone }?.toSet()
+        if (timezones?.size == 1) {
             val timezone = timezones.first()
             if (timezone == null) {
                 this._changeTimezoneButton.visibility = View.VISIBLE
@@ -413,7 +439,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
      * @param state     The state to update the disabled states to.
      */
     private fun updateDisabledStates(
-        photo: Photo,
+        photo: Media,
         client: StorageClient,
         state: UploadManager.UploadState
     ) {
@@ -530,17 +556,20 @@ abstract class PropertiesActivity : StorageManagerActivity() {
     /**
      * Edits the selected photos by applying the given callback to each photo.
      *
-     * @param callback  A callback to be called on each selected photo, returning the bytes of the new photo.
+     * @param photos    The currently selected photos. Should be `this._selectedPhotos`, exists as a separate parameter to allow a smart cast version of it to a `Set<T>`.
+     * @param callback  A callback to be called on each selected photo, returning the bytes of the new photo. The callback may return null to indicate that the photo should be skipped.
      */
-    private suspend fun editPhotos(callback: suspend (Photo) -> ByteArray) {
-        val photos = this._selectedPhotos.toSet()
-        val newPhotos = mutableSetOf<Photo>()
+    private suspend fun <T : Media> editPhotos(
+        photos: Collection<T>,
+        callback: suspend (T) -> ByteArray?
+    ) {
+        val newPhotos = mutableSetOf<Media>()
 
         // Save the changes. Run on UploadManager's coroutine so that it isn't canceled when the activity is destroyed.
         UploadManager.lifecycleScope.async {
             try {
                 photos.concurrentForEach(UploadManager) { photo ->
-                    val newBytes = callback(photo)
+                    val newBytes = callback(photo) ?: return@concurrentForEach
 
                     // Add the new SHA1 to the auto-upload ignore list if the old SHA1 is there
                     for (client in this.storageClients()) {

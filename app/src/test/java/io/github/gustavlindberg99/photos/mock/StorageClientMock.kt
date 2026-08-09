@@ -1,10 +1,14 @@
 package io.github.gustavlindberg99.photos.mock
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.core.net.toUri
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DefaultDataSource
 import com.github.gustavlindberg99.androidsuspendutils.flow
+import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.photo.Photo
-import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
 import kotlinx.coroutines.delay
 import okio.ByteString.Companion.toByteString
@@ -13,7 +17,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class StorageClientMock(private val _context: Context) : StorageClient {
     public class TestException : Exception()
 
-    public val photos = mutableMapOf<FileHandleMock, Photo>()
+    public val photos = mutableMapOf<FileHandleMock, Media>()
     public var networkDown = false
 
     public override val name = "Test"
@@ -36,7 +40,7 @@ class StorageClientMock(private val _context: Context) : StorageClient {
         return this.photos.keys
     }
 
-    public override suspend fun save(photo: Photo) {
+    public override suspend fun save(photo: Media) {
         delay(100.milliseconds)    // Simulate network latencies
 
         if (this.networkDown) {
@@ -49,7 +53,7 @@ class StorageClientMock(private val _context: Context) : StorageClient {
         PhotoManager.update(this._context, photo)
     }
 
-    public override suspend fun overwrite(oldPhoto: Photo, newBytes: ByteArray): Photo {
+    public override suspend fun overwrite(oldPhoto: Media, newBytes: ByteArray): Media {
         delay(100.milliseconds)    // Simulate network latencies
 
         if (this.networkDown) {
@@ -57,7 +61,6 @@ class StorageClientMock(private val _context: Context) : StorageClient {
         }
 
         val handle = this.photos.filterValues { it == oldPhoto }.keys.first()
-        handle.contents = newBytes
         val sha1 = newBytes.toByteString().sha1().hex()
         val newPhoto = Photo(
             oldPhoto.fileName,
@@ -77,7 +80,7 @@ class StorageClientMock(private val _context: Context) : StorageClient {
         return updatedPhoto
     }
 
-    public override suspend fun delete(photo: Photo) {
+    public override suspend fun delete(photo: Media) {
         delay(100.milliseconds)    // Simulate network latencies
 
         if (this.networkDown) {
@@ -87,5 +90,9 @@ class StorageClientMock(private val _context: Context) : StorageClient {
         this.photos[FileHandleMock(photo.fileName)] = photo
         photo.handles.remove(this::class)
         PhotoManager.update(this._context, photo)
+    }
+
+    public override suspend fun dataFactory(context: Context): DataSource.Factory {
+        return DefaultDataSource.Factory(context)
     }
 }

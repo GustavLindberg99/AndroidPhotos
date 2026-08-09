@@ -71,4 +71,6 @@
     <string name="photoQueued">%s → %s\nI kö</string>
     <string name="photoUploading">%s → %s\nLaddar upp</string>
     <string name="chooseTimezone">Välj tidszon</string>
+    <string name="failedToPlayVideo">Kunde inte spela upp video: %s</string>
+    <string name="duration">Längd: %d sekunder</string>
 </resources>

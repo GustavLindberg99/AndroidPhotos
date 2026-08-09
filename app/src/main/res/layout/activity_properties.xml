@@ -60,6 +60,12 @@
             android:textSize="18sp" />
 
         <TextView
+            android:id="@+id/PropertiesActivity_durationRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="18sp" />
+
+        <TextView
             android:id="@+id/PropertiesActivity_dateTimeRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

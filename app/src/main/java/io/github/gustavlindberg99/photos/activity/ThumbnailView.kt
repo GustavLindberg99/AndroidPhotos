@@ -16,7 +16,7 @@ import androidx.core.view.marginLeft
 import androidx.core.view.marginRight
 import androidx.lifecycle.lifecycleScope
 import com.github.gustavlindberg99.androidsuspendutils.launch
-import io.github.gustavlindberg99.photos.photo.Photo
+import io.github.gustavlindberg99.photos.photo.Media
 import kotlinx.coroutines.Job
 import kotlin.math.max
 
@@ -29,7 +29,7 @@ class ThumbnailView(
     private val _selectedMarker: ImageView by lazy { this.findViewById(R.id.ThumbnailView_selectedMarker) }
 
     private var _loadJob: Job? = null
-    private var _photo: Photo? = null
+    private var _photo: Media? = null
 
     init {
         View.inflate(context, R.layout.view_thumbnail, this)
@@ -49,7 +49,7 @@ class ThumbnailView(
      *
      * @param photo The photo to set the thumbnail of.
      */
-    public fun setPhoto(photo: Photo) {
+    public fun setPhoto(photo: Media) {
         if (photo == this._photo) {
             return
         }

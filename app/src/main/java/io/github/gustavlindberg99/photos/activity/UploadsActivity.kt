@@ -12,13 +12,13 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.github.gustavlindberg99.androidsuspendutils.launch
 import io.github.gustavlindberg99.photos.R
-import io.github.gustavlindberg99.photos.photo.Photo
+import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
 import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
 
 class UploadsActivity : StorageManagerActivity() {
     private val _listLayout: LinearLayout by lazy { this.findViewById(R.id.UploadsActivity_listLayout) }
-    private val _views = mutableMapOf<Photo, TextView>()
+    private val _views = mutableMapOf<Media, TextView>()
 
     public override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,7 +59,7 @@ class UploadsActivity : StorageManagerActivity() {
      * @param state     The state of the upload.
      */
     private fun updateUploads(
-        photo: Photo,
+        photo: Media,
         client: StorageClient,
         state: UploadManager.UploadState
     ) {

@@ -3,9 +3,13 @@ package io.github.gustavlindberg99.photos.storage_client
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import androidx.activity.result.ActivityResult
+import androidx.annotation.OptIn
 import androidx.core.content.edit
+import androidx.core.net.toUri
+import androidx.media3.common.util.UnstableApi
 import com.github.gustavlindberg99.androidsuspendutils.SuspendableLauncher
 import com.github.gustavlindberg99.androidsuspendutils.flow
 import com.github.gustavlindberg99.androidsuspendutils.useWithContext
@@ -25,12 +29,14 @@ import com.pcloud.sdk.UploadOptions
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.PCloudFileHandle
-import io.github.gustavlindberg99.photos.photo.Photo
-import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.photo.Media
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPCloudSha1
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotoBySha1
+import io.github.gustavlindberg99.photos.data_source.HttpDataSource
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsChannel
@@ -50,6 +56,13 @@ class PCloudClient private constructor(
         .authenticator(Authenticators.newOAuthAuthenticator(token))
         .create()
 
+    private val _httpClient = HttpClient(Android) {
+        expectSuccess = true
+        defaultRequest {
+            header("Authorization", "Bearer $token")
+        }
+    }
+
     public override val name = this._context.getString(R.string.pCloud)
 
     public override fun equals(other: Any?): Boolean {
@@ -60,7 +73,7 @@ class PCloudClient private constructor(
         return PCloudClient::class::qualifiedName.hashCode()
     }
 
-    public override fun getAllPhotos(): Flow<Photo> = flow { f ->
+    public override fun getAllPhotos(): Flow<Media> = flow { f ->
         val picturesFolder = this.getPicturesFolder() ?: return@flow
         val photoFiles = this.photosInFolder(picturesFolder)
         for (file in photoFiles) {
@@ -86,7 +99,7 @@ class PCloudClient private constructor(
         }
     }
 
-    public override suspend fun save(photo: Photo) {
+    public override suspend fun save(photo: Media) {
         // Create the "My Pictures" folder if it doesn't already exist
         val picturesFolder = getPicturesFolder() ?: withContext(Dispatchers.IO) {
             _apiClient.createFolder("/" + photosFolder(this._context)).execute()
@@ -120,7 +133,7 @@ class PCloudClient private constructor(
         PhotoManager.update(this._context, photo)
     }
 
-    public override suspend fun overwrite(oldPhoto: Photo, newBytes: ByteArray): Photo {
+    public override suspend fun overwrite(oldPhoto: Media, newBytes: ByteArray): Media {
         val handle = oldPhoto.handles[this::class] as PCloudFileHandle
         val remoteFile = withContext(Dispatchers.IO) {
             _apiClient.loadFile(handle.id).execute()
@@ -147,13 +160,18 @@ class PCloudClient private constructor(
         return PhotoManager.update(this._context, newPhoto)
     }
 
-    public override suspend fun delete(photo: Photo) {
+    public override suspend fun delete(photo: Media) {
         val id = photo.handles[this::class] as PCloudFileHandle
         withContext(Dispatchers.IO) {
             _apiClient.deleteFile(id.id).execute()
         }
         photo.handles.remove(this::class)
         PhotoManager.update(this._context, photo, delete = true)
+    }
+
+    @OptIn(UnstableApi::class)
+    public override suspend fun dataFactory(context: Context): androidx.media3.datasource.DataSource.Factory {
+        return androidx.media3.datasource.DataSource.Factory { HttpDataSource(this._httpClient) }
     }
 
     /**
@@ -180,6 +198,33 @@ class PCloudClient private constructor(
             }
             .bodyAsChannel()
             .toInputStream()
+    }
+
+    /**
+     * Gets the playback URI of the file with the given ID.
+     *
+     * @param id    The ID of the file.
+     *
+     * @return The playback URI of the file.
+     */
+    public suspend fun getPlaybackUri(id: Long): Uri = withContext(Dispatchers.IO) {
+        return@withContext this._apiClient
+            .createFileLink(id, DownloadOptions.DEFAULT)
+            .execute()
+            .bestUrl()
+            .toString()
+            .toUri()
+    }
+
+    /**
+     * Gets the size of the file with the given ID.
+     *
+     * @param id    The ID of the file.
+     *
+     * @return The size of the file.
+     */
+    public suspend fun getSize(id: Long): Long = withContext(Dispatchers.IO) {
+        return@withContext this._apiClient.loadFile(id).execute().size()
     }
 
     /**

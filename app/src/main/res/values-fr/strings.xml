@@ -71,4 +71,6 @@
     <string name="photoQueued">%s → %s\nEn attente</string>
     <string name="photoUploading">%s → %s\nTéléchargement</string>
     <string name="chooseTimezone">Choisir un fuseau horaire</string>
+    <string name="failedToPlayVideo">Impossible de lire la vidéo: %s</string>
+    <string name="duration">Durée: %d secondes</string>
 </resources>

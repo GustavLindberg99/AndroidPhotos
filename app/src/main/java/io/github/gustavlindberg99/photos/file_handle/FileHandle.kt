@@ -1,5 +1,6 @@
 package io.github.gustavlindberg99.photos.file_handle
 
+import android.net.Uri
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import java.io.InputStream
 
@@ -22,4 +23,20 @@ interface FileHandle {
         context: StorageManagerActivity,
         range: LongRange? = null
     ): InputStream
+
+    /**
+     * Gets the size of the file in bytes.
+     *
+     * @param context   The context to use.
+     *
+     * @return The size of the file in bytes.
+     */
+    public suspend fun getSize(context: StorageManagerActivity): Long
+
+    /**
+     * Gets the URI for the file to use to play videos.
+     *
+     * @return The URI for the file.
+     */
+    public suspend fun getPlaybackUri(context: StorageManagerActivity): Uri
 }

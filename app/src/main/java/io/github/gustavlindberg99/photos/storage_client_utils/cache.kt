@@ -3,10 +3,8 @@ package io.github.gustavlindberg99.photos.storage_client_utils
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
-import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.net.toUri
-import androidx.exifinterface.media.ExifInterface
 import com.github.gustavlindberg99.androidsuspendutils.useWithContext
 import com.pcloud.sdk.ApiClient
 import com.pcloud.sdk.RemoteFile
@@ -14,12 +12,16 @@ import io.github.gustavlindberg99.photos.BuildConfig
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.FileHandle
 import io.github.gustavlindberg99.photos.file_handle.UriHandle
+import io.github.gustavlindberg99.photos.metadata_parser.MetadataParser
+import io.github.gustavlindberg99.photos.metadata_parser.PhotoMetadataParser
+import io.github.gustavlindberg99.photos.metadata_parser.VideoMetadataParser
+import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.photo.Photo
+import io.github.gustavlindberg99.photos.photo.Video
 import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
-import io.github.gustavlindberg99.photos.storage_client.OneDriveStorageClient
 import io.github.gustavlindberg99.photos.storage_client.PCloudClient
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
-import io.github.gustavlindberg99.photos.utils.makeGeoPoint
+import io.github.gustavlindberg99.photos.data_source.FileHandleMediaDataSource
 import io.github.gustavlindberg99.photos.utils.readThumbnailBitmapFromInputStream
 import io.github.gustavlindberg99.photos.utils.rotate
 import io.github.gustavlindberg99.photos.utils.toJsonObjectList
@@ -33,7 +35,6 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import org.osmdroid.util.GeoPoint
-import java.io.File
 import java.io.IOException
 import java.util.SortedSet
 import kotlin.apply
@@ -48,6 +49,7 @@ private const val LATITUDE = "latitude"
 private const val LONGITUDE = "longitude"
 private const val DATE_TIME = "dateTime"
 private const val TIMEZONE = "timezone"
+private const val DURATION = "duration"
 
 private const val THUMBNAILS_DIR = "thumbnails"
 private const val METADATA_DIR = "metadata"
@@ -58,11 +60,11 @@ private const val PHOTOS_FILE = "photos.json"
  *
  * Since the SHA1 is (in practice) unique for each possible photo with each possible metadata, this cache does not have to be invalidated.
  *
- * @param context       The context of the application.
- * @param sha1          The SHA1 checksum of the photo, used as a key for the cache.
- * @param handle        The handle of the photo.
- * @param rotation      The rotation of the photo.
- * @param exifInterface The EXIF interface of the photo.
+ * @param context           The context of the application.
+ * @param sha1              The SHA1 checksum of the photo, used as a key for the cache.
+ * @param handle            The handle of the photo.
+ * @param rotation          The rotation of the photo.
+ * @param metadataParser    The metadata parser of the photo.
  *
  * @return The URI of the cached thumbnail, or null if the given URIs point to an invalid photo.
  */
@@ -71,13 +73,12 @@ public suspend fun getCachedThumbnailBySha1(
     sha1: String,
     handle: FileHandle,
     rotation: Int,
-    exifInterface: ExifInterface?
+    metadataParser: MetadataParser?
 ): Uri? {
-    val extension = File(handle.toString()).extension
-    val thumbnailFile = context.cacheDir.resolve("$THUMBNAILS_DIR/$sha1.$extension")
+    val thumbnailFile = context.cacheDir.resolve("$THUMBNAILS_DIR/$sha1")
 
     if (!thumbnailFile.exists()) {
-        val unrotatedThumbnail = exifInterface?.thumbnailBitmap
+        val unrotatedThumbnail = metadataParser?.thumbnail()
             ?: readThumbnailBitmapFromInputStream(handle.getInputStream(context))
             ?: return null
         val thumbnail = unrotatedThumbnail.rotate(rotation)
@@ -110,7 +111,7 @@ public suspend fun getCachedPhotoBySha1(
     mimeType: String,
     sha1: String,
     handles: MutableMap<KClass<out StorageClient>, FileHandle>
-): Photo? {
+): Media? {
     val clients = context.storageClients().filter { it::class in handles }
     val mainClient = clients.firstOrNull { it is LocalStorageClient } ?: clients.first()
     val mainHandle = handles[mainClient::class]!!
@@ -143,10 +144,107 @@ public suspend fun getCachedPhotoBySha1(
             catch (_: JSONException) {
                 null
             }
+            val duration = try {
+                json.getLong(DURATION)
+            }
+            catch (_: JSONException) {
+                null
+            }
             val thumbnailUri =
                 getCachedThumbnailBySha1(context, sha1, mainHandle, rotation, null) ?: return null
 
-            return Photo(
+            if (duration != null) {
+                return Video(
+                    fileName,
+                    mimeType,
+                    width,
+                    height,
+                    duration,
+                    location,
+                    sha1,
+                    dateTime,
+                    thumbnailUri,
+                    handles
+                )
+            }
+            else {
+                return Photo(
+                    fileName,
+                    mimeType,
+                    width,
+                    height,
+                    location,
+                    sha1,
+                    dateTime,
+                    timezone,
+                    thumbnailUri,
+                    handles
+                )
+            }
+        }
+    }
+
+    // Extract EXIF data
+    val isVideo = mimeType.startsWith("video/")
+    val metadataParser = try {
+        if (mainHandle is UriHandle && mainHandle.isLocal()) {
+            // For local files, reading from the file descriptor is the most efficient way, but the file descriptor can't be closed while the ExifInterface object is still in use.
+            // Reading the bytes like for the remote files would also work, but would be much less efficient.
+            val fd = context.contentResolver.openFileDescriptor(mainHandle.uri(), "r")
+            fd?.use {
+                if (isVideo) VideoMetadataParser(it) else PhotoMetadataParser(it)
+            } ?: throw IOException("Failed to open file descriptor")
+        }
+        else if (isVideo) {
+            val size = mainHandle.getSize(context)
+            withContext(Dispatchers.IO) {
+                VideoMetadataParser(FileHandleMediaDataSource(context, mainHandle, size))
+            }
+        }
+        else {
+            // For remote files, reading the bytes and then parsing them separately is the only reliable way of getting the EXIF data. Reading directly from the input stream would risk causing hangs.
+            // This can however be made more efficient by limiting the range.
+            val bytes = mainHandle.getInputStream(context, 0L..131071L)
+                .useWithContext(Dispatchers.IO) { it.readBytes() }
+            PhotoMetadataParser(bytes)
+        }
+    }
+    catch (_: IOException) {
+        return null
+    }
+
+    val width = metadataParser.width() ?: return null
+    val height = metadataParser.height() ?: return null
+    val rotation = metadataParser.rotation()
+    val location = metadataParser.location()
+    val dateTime = metadataParser.dateTime()
+
+    val thumbnailUri =
+        getCachedThumbnailBySha1(context, sha1, mainHandle, rotation, metadataParser) ?: return null
+
+    // Cache metadata
+    val json = JSONObject().apply {
+        put(WIDTH, width)
+        put(HEIGHT, height)
+        put(ROTATION, rotation)
+        if (location != null) {
+            put(LATITUDE, location.latitude)
+            put(LONGITUDE, location.longitude)
+        }
+        if (dateTime != null) {
+            put(DATE_TIME, dateTime)
+        }
+    }
+
+    val result: Media
+    when (metadataParser) {
+        is PhotoMetadataParser -> {
+            val timezone = metadataParser.timezone()
+            if (timezone != null) {
+                json.put(TIMEZONE, timezone)
+            }
+
+            result = Photo(
                 fileName,
                 mimeType,
                 width,
@@ -159,93 +257,32 @@ public suspend fun getCachedPhotoBySha1(
                 handles
             )
         }
+
+        is VideoMetadataParser -> {
+            val duration = metadataParser.duration() ?: return null
+            json.put(DURATION, duration)
+
+            result = Video(
+                fileName,
+                mimeType,
+                width,
+                height,
+                duration,
+                location,
+                sha1,
+                dateTime,
+                thumbnailUri,
+                handles
+            )
+        }
     }
 
-    // Extract EXIF data
-    var fd: ParcelFileDescriptor? = null
-    try {
-        if (mainClient is OneDriveStorageClient) {
-            println("Hello World 1: $fileName")
-        }
-        val exifInterface = try {
-            if (mainHandle is UriHandle && mainHandle.isLocal()) {
-                // For local files, reading from the file descriptor is the most efficient way, but the file descriptor can't be closed while the ExifInterface object is still in use.
-                // Reading the bytes like for the remote files would also work, but would be much less efficient.
-                fd = context.contentResolver.openFileDescriptor(mainHandle.uri(), "r")!!
-                ExifInterface(fd.fileDescriptor)
-            }
-            else {
-                // For remote files, reading the bytes and then parsing them separately is the only reliable way of getting the EXIF data. Reading directly from the input stream would risk causing hangs.
-                // This can however be made more efficient by limiting the range.
-                val bytes = mainHandle.getInputStream(context, 0L..131071L)
-                    .useWithContext(Dispatchers.IO) { it.readBytes() }
-                bytes.inputStream().use { ExifInterface(it) }
-            }
-        }
-        catch (_: IOException) {
-            return null
-        }
-        if (mainClient is OneDriveStorageClient) {
-            println("Hello World 2: $fileName")
-        }
-
-        val width = exifInterface.getAttributeInt(ExifInterface.TAG_IMAGE_WIDTH, 0)
-        val height = exifInterface.getAttributeInt(ExifInterface.TAG_IMAGE_LENGTH, 0)
-        if (width <= 0 || height <= 0) {
-            // Photo is invalid, skip it
-            return null
-        }
-
-        val location = makeGeoPoint(exifInterface.latLong?.get(0), exifInterface.latLong?.get(1))
-        val rotation = exifInterface.rotationDegrees
-        val dateTime = (exifInterface.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
-            ?: exifInterface.getAttribute(ExifInterface.TAG_DATETIME))
-        val timezone = exifInterface.getAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL)
-            ?: exifInterface.getAttribute(ExifInterface.TAG_OFFSET_TIME)
-
-        val thumbnailUri =
-            getCachedThumbnailBySha1(context, sha1, mainHandle, rotation, exifInterface)
-                ?: return null
-
-        // Cache metadata
-        val json = JSONObject().apply {
-            put(WIDTH, width)
-            put(HEIGHT, height)
-            put(ROTATION, rotation)
-            if (location != null) {
-                put(LATITUDE, location.latitude)
-                put(LONGITUDE, location.longitude)
-            }
-            if (dateTime != null) {
-                put(DATE_TIME, dateTime)
-            }
-            if (timezone != null) {
-                put(TIMEZONE, timezone)
-            }
-        }
-        metadataFile.parentFile?.mkdirs()
-        metadataFile.outputStream().use { outputStream ->
-            outputStream.write(json.toString().toByteArray(Charsets.UTF_8))
-        }
-
-        return Photo(
-            fileName,
-            mimeType,
-            width,
-            height,
-            location,
-            sha1,
-            dateTime,
-            timezone,
-            thumbnailUri,
-            handles
-        )
+    metadataFile.parentFile?.mkdirs()
+    metadataFile.outputStream().use { outputStream ->
+        outputStream.write(json.toString().toByteArray(Charsets.UTF_8))
     }
-    finally {
-        withContext(Dispatchers.IO) {
-            fd?.close()
-        }
-    }
+
+    return result
 }
 
 /**
@@ -301,7 +338,7 @@ public suspend fun getCachedPCloudSha1(
  * @param context   The context of the application.
  * @param allPhotos The photos to cache.
  */
-public fun setCachedPhotos(context: Context, allPhotos: Set<Photo>) {
+public fun setCachedPhotos(context: Context, allPhotos: Set<Media>) {
     val file = context.cacheDir.resolve(PHOTOS_FILE)
     val jsonData = JSONArray(allPhotos.map { it.toJson() })
     val json = JSONObject().apply {
@@ -322,14 +359,14 @@ public fun setCachedPhotos(context: Context, allPhotos: Set<Photo>) {
  */
 public suspend fun getCachedPhotos(
     context: Context
-): SortedSet<Photo> = withContext(Dispatchers.IO) {
+): SortedSet<Media> = withContext(Dispatchers.IO) {
     try {
         val file = context.cacheDir.resolve(PHOTOS_FILE)
         val json = JSONObject(file.readText())
         val jsonData = json.getJSONArray(DATA)
         // Make sure they're sorted so that they show up in the correct order in time when opening the app.
         // While the main activity takes care of sorting the thumbnails in space, it looks weird if photos last in the list appear before photos first in the list.
-        return@withContext jsonData.toJsonObjectList().map { Photo.fromJson(it) }.toSortedSet()
+        return@withContext jsonData.toJsonObjectList().map { Media.fromJson(it) }.toSortedSet()
     }
     catch (_: IOException) {
         // This is normal if the cache is empty

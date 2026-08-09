@@ -3,8 +3,9 @@ package io.github.gustavlindberg99.photos
 import android.content.Context
 import androidx.lifecycle.testing.TestLifecycleOwner
 import androidx.test.core.app.ApplicationProvider
+import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.photo.Photo
-import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client.GoogleDriveClient
 import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import kotlinx.coroutines.test.runTest
@@ -27,7 +28,7 @@ class PhotoManagerTest : PhotoTestBase() {
     fun photoAddedListenerTest() = runTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val lifecycleOwner = TestLifecycleOwner()
-        val addedPhotos = mutableSetOf<Photo>()
+        val addedPhotos = mutableSetOf<Media>()
         PhotoManager.setPhotoAddedListener(context, lifecycleOwner, addedPhotos::add)
         PhotoManager.update(context, photo1)
         PhotoManager.update(context, photo2)
@@ -40,7 +41,7 @@ class PhotoManagerTest : PhotoTestBase() {
     fun photoRemovedListenerTest() = runTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val lifecycleOwner = TestLifecycleOwner()
-        val removedPhotos = mutableSetOf<Photo>()
+        val removedPhotos = mutableSetOf<Media>()
         PhotoManager.setPhotoRemovedListener(lifecycleOwner, removedPhotos::add)
 
         PhotoManager.update(context, photo1)
@@ -57,7 +58,7 @@ class PhotoManagerTest : PhotoTestBase() {
     fun removeClientTest() = runTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val lifecycleOwner = TestLifecycleOwner()
-        val removedPhotos = mutableSetOf<Photo>()
+        val removedPhotos = mutableSetOf<Media>()
         PhotoManager.setPhotoRemovedListener(lifecycleOwner, removedPhotos::add)
         PhotoManager.update(context, photo1)
         PhotoManager.update(context, photo2)

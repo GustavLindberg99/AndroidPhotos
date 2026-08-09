@@ -25,8 +25,8 @@ import com.google.android.flexbox.FlexWrap
 import com.google.android.flexbox.FlexboxLayoutManager
 import com.google.android.flexbox.JustifyContent
 import io.github.gustavlindberg99.photos.R
-import io.github.gustavlindberg99.photos.photo.Photo
-import io.github.gustavlindberg99.photos.photo.PhotoManager
+import io.github.gustavlindberg99.photos.photo.Media
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -39,7 +39,7 @@ class MainActivity : PropertiesActivity() {
     private val _uploadsButton: ImageButton by lazy { this.findViewById(R.id.MainActivity_uploadsButton) }
     private val _settingsButton: ImageButton by lazy { this.findViewById(R.id.MainActivity_settingsButton) }
     private val _photoAdapter: PhotoAdapter by lazy { PhotoAdapter() }
-    private val _photosInLayout = sortedSetOf<Photo>()
+    private val _photosInLayout = sortedSetOf<Media>()
     private var _syncJob: Job? = null
     private var _updateJob: Job? = null
 
@@ -145,7 +145,7 @@ class MainActivity : PropertiesActivity() {
         }
     }
 
-    public override fun togglePhotoSelected(photo: Photo, updateUi: Boolean): Boolean {
+    public override fun togglePhotoSelected(photo: Media, updateUi: Boolean): Boolean {
         val selected = super.togglePhotoSelected(photo, updateUi)
         val index = this._photosInLayout.indexOf(photo)
         if (index != -1) {
@@ -164,7 +164,7 @@ class MainActivity : PropertiesActivity() {
      *
      * @param photo The photo to add.
      */
-    private fun addPhotoToLayout(photo: Photo) {
+    private fun addPhotoToLayout(photo: Media) {
         if (this._photosInLayout.add(photo)) {
             this.updatePhotosInLayout()
         }
@@ -175,7 +175,7 @@ class MainActivity : PropertiesActivity() {
      *
      * @param photo The photo to remove.
      */
-    private fun removePhotoFromLayout(photo: Photo) {
+    private fun removePhotoFromLayout(photo: Media) {
         if (this._photosInLayout.remove(photo)) {
             this.updatePhotosInLayout()
         }
@@ -198,12 +198,12 @@ class MainActivity : PropertiesActivity() {
      * Adapter for showing a photo in a RecyclerView.
      */
     private inner class PhotoAdapter :
-        ListAdapter<Photo, PhotoAdapter.ViewHolder>(object : DiffUtil.ItemCallback<Photo>() {
-            override fun areItemsTheSame(oldItem: Photo, newItem: Photo): Boolean {
+        ListAdapter<Media, PhotoAdapter.ViewHolder>(object : DiffUtil.ItemCallback<Media>() {
+            override fun areItemsTheSame(oldItem: Media, newItem: Media): Boolean {
                 return oldItem.sha1 == newItem.sha1
             }
 
-            override fun areContentsTheSame(oldItem: Photo, newItem: Photo): Boolean {
+            override fun areContentsTheSame(oldItem: Media, newItem: Media): Boolean {
                 return oldItem.sha1 == newItem.sha1
             }
         }) {

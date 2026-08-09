@@ -9,6 +9,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.contentLength
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.Dispatchers
 import java.io.IOException
@@ -35,6 +36,24 @@ data class UriHandle(private val _uri: Uri) : FileHandle {
                 .bodyAsChannel()
                 .toInputStream()
         }
+    }
+
+    public override suspend fun getSize(
+        context: StorageManagerActivity
+    ): Long = withContext(Dispatchers.IO) {
+        if (this.isLocal()) {
+            return@withContext context.contentResolver.openFileDescriptor(this.uri(), "r")?.use {
+                it.statSize
+            } ?: 0L
+        }
+        else {
+            // For remote HTTP URIs, fetch the content length
+            return@withContext HttpClient(Android).get(this._uri.toString()).contentLength() ?: 0L
+        }
+    }
+
+    public override suspend fun getPlaybackUri(context: StorageManagerActivity): Uri {
+        return this.uri()
     }
 
     /**
