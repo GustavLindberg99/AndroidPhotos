@@ -26,6 +26,7 @@ import com.onedrive.sdk.extensions.IOneDriveClient
 import com.onedrive.sdk.extensions.Item
 import com.onedrive.sdk.extensions.OneDriveClient
 import com.onedrive.sdk.generated.IBaseItemRequestBuilder
+import com.onedrive.sdk.http.OneDriveServiceException
 import com.onedrive.sdk.options.HeaderOption
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
@@ -187,8 +188,17 @@ class OneDriveStorageClient private constructor(
     public override suspend fun delete(photo: Media) {
         val handle = photo.handles[this::class] as OneDriveFileHandle
         val client = this.client()
-        awaitApiCall {
-            client.drive.getItems(handle.id).buildRequest().delete(it)
+        try {
+            awaitApiCall<Void> {
+                client.drive.getItems(handle.id).buildRequest().delete(it)
+            }
+        }
+        catch (e: OneDriveServiceException) {
+            // Ignore itemNotFound exceptions because that can happen if the photo is already deleted
+            val message = e.message
+            if (message == null || !message.contains("itemNotFound")) {
+                throw e
+            }
         }
         photo.handles.remove(this::class)
         PhotoManager.update(this._context, photo, delete = true)
@@ -306,7 +316,15 @@ class OneDriveStorageClient private constructor(
             return client
         }
         val promise = this._clientPromise ?: this._context.lifecycleScope.async {
-            createClient(this._context, UPLOAD_TIMEOUT)
+            try {
+                val createdClient = createClient(this._context, UPLOAD_TIMEOUT)
+                this._client = createdClient
+                return@async createdClient
+            }
+            catch (e: Exception) {
+                this._clientPromise = null
+                throw e
+            }
         }
         this._clientPromise = promise
         return promise.await()
