@@ -72,4 +72,11 @@
     <string name="chooseTimezone">Choose timezone</string>
     <string name="failedToPlayVideo">Failed to play video: %s</string>
     <string name="duration">Duration: %d seconds</string>
+    <string name="share">Share</string>
+    <plurals name="shareFailed">
+        <item quantity="one">Failed to share photo: %s</item>
+        <item quantity="other">Failed to share photos: %s</item>
+    </plurals>
+    <string name="uploaded">Uploaded</string>
+    <string name="video">Video</string>
 </resources>

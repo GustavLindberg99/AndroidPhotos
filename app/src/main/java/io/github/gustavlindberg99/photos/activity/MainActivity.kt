@@ -26,7 +26,10 @@ import com.google.android.flexbox.FlexboxLayoutManager
 import com.google.android.flexbox.JustifyContent
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.photo.Media
+import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
+import io.github.gustavlindberg99.photos.storage_client.StorageClient
 import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
+import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -207,6 +210,10 @@ class MainActivity : PropertiesActivity() {
                 return oldItem.sha1 == newItem.sha1
             }
         }) {
+        init {
+            UploadManager.setStateChangedListener(this::updateCloudStatus)
+        }
+
         public inner class ViewHolder(val thumbnailView: ThumbnailView) :
             RecyclerView.ViewHolder(thumbnailView)
 
@@ -246,6 +253,37 @@ class MainActivity : PropertiesActivity() {
             holder.thumbnailView.setOnLongClickListenerAsync {
                 val updatedPhoto = PhotoManager.getUpdated(this@MainActivity, photo)
                 this@MainActivity.togglePhotoSelected(updatedPhoto)
+            }
+        }
+
+        public override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+            super.onDetachedFromRecyclerView(recyclerView)
+            UploadManager.removeStateChangedListener(this::updateCloudStatus)
+        }
+
+        /**
+         * Updates the cloud icon of the thumbnail view if needed.
+         *
+         * @param photo     The photo that was updated.
+         * @param client    The client that updated the photo.
+         * @param state     The new state of the upload.
+         */
+        private fun updateCloudStatus(
+            photo: Media,
+            client: StorageClient,
+            state: UploadManager.UploadState
+        ) {
+            if (state == UploadManager.UploadState.FINISHED && client !is LocalStorageClient) {
+                this@MainActivity.runOnUiThread {
+                    val position = this.currentList.indexOf(photo)
+                    if (position != -1) {
+                        val viewHolder =
+                            this@MainActivity._recyclerView.findViewHolderForAdapterPosition(
+                                position
+                            ) as? ViewHolder
+                        viewHolder?.thumbnailView?.updateCloudStatus()
+                    }
+                }
             }
         }
     }

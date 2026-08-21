@@ -1,6 +1,8 @@
 package io.github.gustavlindberg99.photos.activity
 
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -14,6 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.FileProvider
 import androidx.core.util.TypedValueCompat.dpToPx
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -25,9 +28,11 @@ import com.github.gustavlindberg99.androidsuspendutils.launch
 import com.github.gustavlindberg99.androidsuspendutils.setOnClickListenerAsync
 import com.github.gustavlindberg99.androidsuspendutils.setOnItemSelectedAsync
 import com.github.gustavlindberg99.androidsuspendutils.showAsync
+import com.github.gustavlindberg99.androidsuspendutils.useWithContext
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.checkbox.MaterialCheckBox
 import io.github.gustavlindberg99.photos.R
+import io.github.gustavlindberg99.photos.file_handle.UriHandle
 import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.photo.Photo
 import io.github.gustavlindberg99.photos.photo.Video
@@ -38,6 +43,7 @@ import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
 import io.github.gustavlindberg99.photos.utils.addToStringSet
 import io.github.gustavlindberg99.photos.utils.asTypeOrNull
 import io.github.gustavlindberg99.photos.utils.initOsmdroid
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import okio.ByteString.Companion.toByteString
 import org.osmdroid.events.MapEventsReceiver
@@ -45,6 +51,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
+import java.io.File
 import java.util.Collections
 import kotlin.math.max
 
@@ -58,6 +65,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
     private val _rotateLeftButton: ImageButton by lazy { this.findViewById(R.id.PropertiesActivity_rotateLeftButton) }
     private val _rotateRightButton: ImageButton by lazy { this.findViewById(R.id.PropertiesActivity_rotateRightButton) }
     private val _deleteButton: ImageButton by lazy { this.findViewById(R.id.PropertiesActivity_deleteButton) }
+    private val _shareButton: ImageButton by lazy { this.findViewById(R.id.PropertiesActivity_shareButton) }
     private val _fileNameRow: TextView by lazy { this.findViewById(R.id.PropertiesActivity_fileNameRow) }
     private val _durationRow: TextView by lazy { this.findViewById(R.id.PropertiesActivity_durationRow) }
     private val _dateTimeRow: TextView by lazy { this.findViewById(R.id.PropertiesActivity_dateTimeRow) }
@@ -143,6 +151,8 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         this._deleteButton.setOnClickListenerAsync {
             this.changeBackupState(this.storageClients(), false)
         }
+
+        this._shareButton.setOnClickListenerAsync { this.share() }
 
         this._changeLocationButton.setOnClickListener { this.startEditingLocation() }
         this._deleteLocationButton.setOnClickListenerAsync {
@@ -462,6 +472,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         this._rotateLeftButton.isEnabled = enable
         this._rotateRightButton.isEnabled = enable
         this._deleteButton.isEnabled = enable
+        this._shareButton.isEnabled = enable
         this._changeTimezoneButton.isEnabled = enable
         this._changeLocationButton.isEnabled = enable
         this._deleteLocationButton.isEnabled = enable
@@ -551,6 +562,86 @@ abstract class PropertiesActivity : StorageManagerActivity() {
 
         // Update the UI
         this.updateUi()
+    }
+
+    /**
+     * Opens a share dialog for the selected photos. Returns when the dialog is opened.
+     */
+    private suspend fun share() {
+        // Copy the photos set to a local variable to avoid concurrent modification
+        val photos = this._selectedPhotos.toSet()
+
+        try {
+            val sharedPhotosDir by lazy { this.sharedPhotosDir() }
+            val uris: List<Uri> = photos.map { photo ->
+                val localHandle = photo.handles[LocalStorageClient::class] as? UriHandle
+                if (localHandle != null) {
+                    // Use existing local URI if possible
+                    return@map localHandle.uri()
+                }
+                else {
+                    // Download cloud-only photo to cache for sharing. The sha1 is needed for the names to be unique, and the fileName is needed for the extension to be correct (otherwise some apps will think it's raw binary data rather than a photo).
+                    val tempFile = File(sharedPhotosDir, photo.sha1 + photo.fileName)
+                    photo.getInputStream(this).useWithContext(Dispatchers.IO) { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    return@map FileProvider.getUriForFile(
+                        this,
+                        "${this.packageName}.fileprovider",
+                        tempFile
+                    )
+                }
+            }
+
+            val mimeTypes = photos.map { it.mimeType }.toSet()
+            val commonMimeType = when {
+                mimeTypes.size == 1 -> mimeTypes.first()
+                mimeTypes.all { it.startsWith("image/") } -> "image/*"
+                mimeTypes.all { it.startsWith("video/") } -> "video/*"
+                else -> "*/*"
+            }
+
+            val intent = if (uris.size == 1) Intent(Intent.ACTION_SEND).apply {
+                putExtra(Intent.EXTRA_STREAM, uris.first())
+            }
+            else Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+            }
+            intent.type = commonMimeType
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+            val chooser = Intent.createChooser(intent, this.getString(R.string.share))
+            this.startActivity(chooser)
+        }
+        catch (e: Exception) {
+            Log.e(this.javaClass.name, e.message, e)
+            Toast.makeText(
+                this,
+                this.resources.getQuantityString(
+                    R.plurals.shareFailed,
+                    photos.size,
+                    e.message
+                ),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    /**
+     * Creates a temporary directory for sharing photos.
+     *
+     * @return The temporary directory.
+     */
+    private fun sharedPhotosDir(): File {
+        val sharedPhotosDir = File(this.cacheDir, "shared_photos")
+        // Clear old shared files to save space
+        if (sharedPhotosDir.exists()) {
+            sharedPhotosDir.deleteRecursively()
+        }
+        sharedPhotosDir.mkdirs()
+        return sharedPhotosDir
     }
 
     /**

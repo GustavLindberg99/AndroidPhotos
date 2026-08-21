@@ -51,6 +51,14 @@
                 android:backgroundTint="@color/button_color"
                 android:contentDescription="@string/delete"
                 android:src="@drawable/baseline_delete_24" />
+
+            <ImageButton
+                android:id="@+id/PropertiesActivity_shareButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:backgroundTint="@color/button_color"
+                android:contentDescription="@string/share"
+                android:src="@drawable/baseline_share_24" />
         </LinearLayout>
 
         <TextView

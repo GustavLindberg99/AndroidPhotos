@@ -12,9 +12,13 @@ import io.github.gustavlindberg99.photos.R
 import androidx.core.view.isVisible
 import androidx.core.view.marginLeft
 import androidx.core.view.marginRight
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.github.gustavlindberg99.androidsuspendutils.launch
 import io.github.gustavlindberg99.photos.photo.Media
+import io.github.gustavlindberg99.photos.photo.Video
+import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import kotlinx.coroutines.Job
 import kotlin.math.max
 
@@ -25,6 +29,8 @@ class ThumbnailView(
 ) : FrameLayout(context, attrSet, defStyleAttr) {
     private val _thumbnail: ImageView by lazy { this.findViewById(R.id.ThumbnailView_thumbnail) }
     private val _selectedMarker: ImageView by lazy { this.findViewById(R.id.ThumbnailView_selectedMarker) }
+    private val _uploadedMarker: ImageView by lazy { this.findViewById(R.id.ThumbnailView_uploadedMarker) }
+    private val _videoMarker: ImageView by lazy { this.findViewById(R.id.ThumbnailView_videoMarker) }
 
     private var _loadJob: Job? = null
     private var _photo: Media? = null
@@ -40,7 +46,24 @@ class ThumbnailView(
         get() = this._selectedMarker.isVisible
         set(value) {
             this._selectedMarker.isVisible = value
+            this.updateCloudStatus()
         }
+
+    /**
+     * Updates the cloud icon based on the current state of the photo.
+     */
+    public fun updateCloudStatus() = (this.context as LifecycleOwner).lifecycleScope.launch {
+        val oldPhoto = this._photo
+        if (oldPhoto != null) {
+            val photo = PhotoManager.getUpdated(this.context, oldPhoto)
+            this._photo = photo
+
+            // Hide the cloud icon if the photo is selected because it's in the same place as the selected icon and if it's selected we can see the detailed cloud status anyway
+            this._uploadedMarker.isVisible =
+                !this.photoSelected &&
+                photo.handles.keys.any { it != LocalStorageClient::class }
+        }
+    }
 
     /**
      * Sets the thumbnail of the photo. This can't be done in the constructor because the SDK expects the constructor to have a specific signature.
@@ -81,5 +104,8 @@ class ThumbnailView(
         imageLp.width = width
         imageLp.height = height
         this._thumbnail.layoutParams = imageLp
+
+        this._videoMarker.isVisible = photo is Video
+        this.updateCloudStatus()
     }
 }

@@ -73,4 +73,11 @@
     <string name="chooseTimezone">Choisir un fuseau horaire</string>
     <string name="failedToPlayVideo">Impossible de lire la vidéo: %s</string>
     <string name="duration">Durée: %d secondes</string>
+    <string name="share">Partager</string>
+    <plurals name="shareFailed">
+        <item quantity="one">Impossible de partager la photo: %s</item>
+        <item quantity="many">Impossible de partager les photos: %s</item>
+    </plurals>
+    <string name="uploaded">Sauvegardé</string>
+    <string name="video">Vidéo</string>
 </resources>

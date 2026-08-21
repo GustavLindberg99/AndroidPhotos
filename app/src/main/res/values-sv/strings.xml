@@ -73,4 +73,11 @@
     <string name="chooseTimezone">Välj tidszon</string>
     <string name="failedToPlayVideo">Kunde inte spela upp video: %s</string>
     <string name="duration">Längd: %d sekunder</string>
+    <string name="share">Dela</string>
+    <plurals name="shareFailed">
+        <item quantity="one">Kunde inte dela fotot: %s</item>
+        <item quantity="other">Kunde inte dela fotona: %s</item>
+    </plurals>
+    <string name="uploaded">Uppladdad</string>
+    <string name="video">Video</string>
 </resources>
