@@ -228,7 +228,7 @@ class MainActivity : PropertiesActivity() {
             holder.thumbnailView.photoSelected = this@MainActivity.selectedPhotos().contains(photo)
 
             holder.thumbnailView.setOnClickListenerAsync {
-                val updatedPhoto = PhotoManager.getUpdated(this@MainActivity, photo)
+                val updatedPhoto = PhotoManager.getUpdated(photo)
                 if (this@MainActivity.selectedPhotos().isEmpty()) {
                     try {
                         val intent = Intent(this@MainActivity, PhotoActivity::class.java)
@@ -251,7 +251,7 @@ class MainActivity : PropertiesActivity() {
             }
 
             holder.thumbnailView.setOnLongClickListenerAsync {
-                val updatedPhoto = PhotoManager.getUpdated(this@MainActivity, photo)
+                val updatedPhoto = PhotoManager.getUpdated(photo)
                 this@MainActivity.togglePhotoSelected(updatedPhoto)
             }
         }
@@ -271,9 +271,9 @@ class MainActivity : PropertiesActivity() {
         private fun updateCloudStatus(
             photo: Media,
             client: StorageClient,
-            state: UploadManager.UploadState
+            @Suppress("unused") state: Int
         ) {
-            if (state == UploadManager.UploadState.FINISHED && client !is LocalStorageClient) {
+            if (client !is LocalStorageClient) {
                 this@MainActivity.runOnUiThread {
                     val position = this.currentList.indexOf(photo)
                     if (position != -1) {

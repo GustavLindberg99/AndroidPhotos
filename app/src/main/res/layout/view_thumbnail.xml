@@ -20,7 +20,31 @@
         android:layout_margin="4dp"
         android:contentDescription="@string/uploaded"
         android:src="@drawable/baseline_cloud_done_24"
-        android:visibility="gone"
+        android:visibility="invisible"
+        app:tint="@color/white"
+        tools:ignore="RtlHardcoded" />
+
+    <ImageView
+        android:id="@+id/ThumbnailView_uploadingMarker"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_gravity="bottom|left"
+        android:layout_margin="4dp"
+        android:contentDescription="@string/uploading"
+        android:src="@drawable/baseline_cloud_upload_24"
+        android:visibility="invisible"
+        app:tint="@color/white"
+        tools:ignore="RtlHardcoded" />
+
+    <ImageView
+        android:id="@+id/ThumbnailView_failedMarker"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_gravity="bottom|left"
+        android:layout_margin="4dp"
+        android:contentDescription="@string/failed"
+        android:src="@drawable/baseline_warning_24"
+        android:visibility="invisible"
         app:tint="@color/white"
         tools:ignore="RtlHardcoded" />
 
@@ -32,7 +56,7 @@
         android:layout_margin="4dp"
         android:contentDescription="@string/video"
         android:src="@drawable/baseline_play_circle_outline_24"
-        android:visibility="gone"
+        android:visibility="invisible"
         app:tint="@color/white"
         tools:ignore="RtlHardcoded" />
 
@@ -43,6 +67,6 @@
         android:layout_gravity="bottom|left"
         android:contentDescription="@string/selected"
         android:src="@drawable/selected"
-        android:visibility="gone"
+        android:visibility="invisible"
         tools:ignore="RtlHardcoded" />
 </FrameLayout>

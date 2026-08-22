@@ -448,16 +448,12 @@ abstract class PropertiesActivity : StorageManagerActivity() {
      * @param client    The client to update the disabled states of.
      * @param state     The state to update the disabled states to.
      */
-    private fun updateDisabledStates(
-        photo: Media,
-        client: StorageClient,
-        state: UploadManager.UploadState
-    ) {
+    private fun updateDisabledStates(photo: Media, client: StorageClient, state: Int) {
         if (photo in this._selectedPhotos) {
-            val enable = state == UploadManager.UploadState.FINISHED
+            val enable = state == UploadManager.FINISHED
             this.setButtonsEnabled(enable)
             this.setCheckboxEnabled(client, enable)
-            if (state == UploadManager.UploadState.FINISHED) {
+            if (state == UploadManager.FINISHED) {
                 this.updateCheckboxStates()
             }
         }

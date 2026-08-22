@@ -155,11 +155,10 @@ object PhotoManager {
     /**
      * Gets the updated photo. Useful if the original [Media] object has been stored for a long time and might have changed since.
      *
-     * @param context   The context to use.
      * @param photo     The photo to get the updated version of.
      */
-    public suspend fun getUpdated(context: Context, photo: Media): Media {
-        return this.allPhotos(context).find { it == photo } ?: photo
+    public fun getUpdated(photo: Media): Media {
+        return this._allPhotos?.find { it == photo } ?: photo
     }
 
     /**

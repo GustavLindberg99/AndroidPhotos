@@ -38,7 +38,7 @@ class StorageClientMock(private val _context: Context) : StorageClient {
         return this.photos.keys
     }
 
-    public override suspend fun save(photo: Media) {
+    public override suspend fun save(photo: Media, progressListener: (Int) -> Unit) {
         delay(100.milliseconds)    // Simulate network latencies
 
         if (this.networkDown) {

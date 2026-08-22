@@ -69,6 +69,8 @@
     <string name="uploads">Uploads</string>
     <string name="photoQueued">%s → %s\nQueued</string>
     <string name="photoUploading">%s → %s\nUploading</string>
+    <string name="uploadFailed">%s → %s\nFailed</string>
+    <string name="uploadProgress">%s → %s\nUploading (%d%%)</string>
     <string name="chooseTimezone">Choose timezone</string>
     <string name="failedToPlayVideo">Failed to play video: %s</string>
     <string name="duration">Duration: %d seconds</string>
@@ -79,4 +81,6 @@
     </plurals>
     <string name="uploaded">Uploaded</string>
     <string name="video">Video</string>
+    <string name="noUploads">No photo is currently being uploaded</string>
+    <string name="failed">Failed</string>
 </resources>

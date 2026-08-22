@@ -12,13 +12,13 @@ import io.github.gustavlindberg99.photos.R
 import androidx.core.view.isVisible
 import androidx.core.view.marginLeft
 import androidx.core.view.marginRight
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.github.gustavlindberg99.androidsuspendutils.launch
 import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.photo.Video
 import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
+import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
 import kotlinx.coroutines.Job
 import kotlin.math.max
 
@@ -30,6 +30,8 @@ class ThumbnailView(
     private val _thumbnail: ImageView by lazy { this.findViewById(R.id.ThumbnailView_thumbnail) }
     private val _selectedMarker: ImageView by lazy { this.findViewById(R.id.ThumbnailView_selectedMarker) }
     private val _uploadedMarker: ImageView by lazy { this.findViewById(R.id.ThumbnailView_uploadedMarker) }
+    private val _uploadingMarker: ImageView by lazy { this.findViewById(R.id.ThumbnailView_uploadingMarker) }
+    private val _failedMarker: ImageView by lazy { this.findViewById(R.id.ThumbnailView_failedMarker) }
     private val _videoMarker: ImageView by lazy { this.findViewById(R.id.ThumbnailView_videoMarker) }
 
     private var _loadJob: Job? = null
@@ -39,30 +41,41 @@ class ThumbnailView(
         View.inflate(context, R.layout.view_thumbnail, this)
     }
 
+    public override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        this._loadJob?.cancel()
+    }
+
     /**
      * True if the file is selected, false otherwise.
      */
     public var photoSelected: Boolean
         get() = this._selectedMarker.isVisible
         set(value) {
-            this._selectedMarker.isVisible = value
+            this._selectedMarker.changeVisibility(value)
             this.updateCloudStatus()
         }
 
     /**
      * Updates the cloud icon based on the current state of the photo.
      */
-    public fun updateCloudStatus() = (this.context as LifecycleOwner).lifecycleScope.launch {
-        val oldPhoto = this._photo
-        if (oldPhoto != null) {
-            val photo = PhotoManager.getUpdated(this.context, oldPhoto)
-            this._photo = photo
+    public fun updateCloudStatus() {
+        val photo = PhotoManager.getUpdated(this._photo ?: return)
+        this._photo = photo
 
-            // Hide the cloud icon if the photo is selected because it's in the same place as the selected icon and if it's selected we can see the detailed cloud status anyway
-            this._uploadedMarker.isVisible =
-                !this.photoSelected &&
-                photo.handles.keys.any { it != LocalStorageClient::class }
-        }
+        val isUploading = UploadManager.isUploading(photo) || UploadManager.isQueued(photo)
+        val failed = UploadManager.hasFailed(photo)
+
+        // Hide the cloud icon if the photo is selected because it's in the same place as the selected icon and if it's selected we can see the detailed cloud status anyway
+        this._uploadedMarker.changeVisibility(
+            !this.photoSelected &&
+            !isUploading &&
+            !failed &&
+            photo.handles.keys.any { it != LocalStorageClient::class }
+        )
+
+        this._uploadingMarker.changeVisibility(!this.photoSelected && isUploading)
+        this._failedMarker.changeVisibility(!this.photoSelected && failed)
     }
 
     /**
@@ -105,7 +118,21 @@ class ThumbnailView(
         imageLp.height = height
         this._thumbnail.layoutParams = imageLp
 
-        this._videoMarker.isVisible = photo is Video
+        this._videoMarker.changeVisibility(photo is Video)
         this.updateCloudStatus()
+    }
+
+    companion object {
+        /**
+         * Sets the visibility of the view, making it invisible instead of gone if it shouldn't be visible (unlike the built-in `isVisible`). This is needed to avoid strange errors due to recycler views.
+         *
+         * @param visible True if the view should be visible, false otherwise.
+         */
+        private fun View.changeVisibility(visible: Boolean) {
+            val newVisibility = if (visible) View.VISIBLE else View.INVISIBLE
+            if (newVisibility != this.visibility) {
+                this.visibility = newVisibility
+            }
+        }
     }
 }

@@ -37,11 +37,12 @@ interface StorageClient {
     /**
      * Save a photo to the storage client.
      *
-     * @param photo The photo to save. Adds the new URI to the photo.
+     * @param photo             The photo to save. Adds the new URI to the photo.
+     * @param progressListener  A lambda that will be called every time the progress is updated. The percentage (between 0 and 100) will be passed as a parameter.
      *
      * @throws Exception If the photo could not be saved.
      */
-    public suspend fun save(photo: Media)
+    public suspend fun save(photo: Media, progressListener: (Int) -> Unit)
 
     /**
      * Overwrite a photo in the storage client. Assumes that the old and new photo both have the same MIME type.

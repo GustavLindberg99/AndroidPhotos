@@ -12,19 +12,22 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import com.github.gustavlindberg99.androidsuspendutils.async
 import com.github.gustavlindberg99.androidsuspendutils.flow
-import com.github.gustavlindberg99.androidsuspendutils.useWithContext
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import com.onedrive.sdk.authentication.MSAAuthenticator
+import com.onedrive.sdk.concurrency.ChunkedUploadProvider
 import com.onedrive.sdk.concurrency.ICallback
+import com.onedrive.sdk.concurrency.IProgressCallback
 import com.onedrive.sdk.core.ClientException
 import com.onedrive.sdk.core.DefaultClientConfig
 import com.onedrive.sdk.core.IClientConfig
+import com.onedrive.sdk.extensions.ChunkedUploadSessionDescriptor
 import com.onedrive.sdk.extensions.Folder
 import com.onedrive.sdk.extensions.IItemCollectionPage
 import com.onedrive.sdk.extensions.IItemCollectionRequestBuilder
 import com.onedrive.sdk.extensions.IOneDriveClient
 import com.onedrive.sdk.extensions.Item
 import com.onedrive.sdk.extensions.OneDriveClient
+import com.onedrive.sdk.extensions.UploadSession
 import com.onedrive.sdk.generated.IBaseItemRequestBuilder
 import com.onedrive.sdk.http.OneDriveServiceException
 import com.onedrive.sdk.options.HeaderOption
@@ -130,7 +133,7 @@ class OneDriveStorageClient private constructor(
         return this.photosInFolder(request).map { OneDriveFileHandle(it.id) }.toSet()
     }
 
-    public override suspend fun save(photo: Media) {
+    public override suspend fun save(photo: Media, progressListener: (Int) -> Unit) {
         // Create the Pictures folder if it doesn't already exist
         val request =
             if (photosFolder(this._context) == "") this.client().drive.root
@@ -146,15 +149,47 @@ class OneDriveStorageClient private constructor(
         // Upload the file
         val id: String
         if (existingFile == null) {
-            val bytes =
-                photo.getInputStream(this._context)
-                    .useWithContext(Dispatchers.IO) { it.readBytes() }
-            val createdFile: Item = awaitApiCall {
+            val inputStream = photo.getInputStream(this._context)
+            val size =
+                (photo.handles[LocalStorageClient::class] ?: photo.handles.values.first()).getSize(
+                    this._context
+                ).toInt()
+
+            val uploadSession: UploadSession<Any> = awaitApiCall {
                 request.children
                     .byId(photo.fileName)
-                    .content
+                    .getCreateSession(ChunkedUploadSessionDescriptor())
                     .buildRequest()
-                    .put(bytes, it)
+                    .post(it)
+            } ?: throw IOException("Failed to create upload session")
+
+            val provider = ChunkedUploadProvider<Item>(
+                uploadSession,
+                this.client(),
+                inputStream,
+                size,
+                Item::class.java
+            )
+
+            val createdFile: Item = withContext(Dispatchers.IO) {
+                awaitApiCall {
+                    provider.upload(
+                        null,
+                        object : IProgressCallback<Item> {
+                            public override fun progress(current: Long, total: Long) {
+                                progressListener((current * 100 / total).toInt())
+                            }
+
+                            public override fun success(result: Item) {
+                                it.success(result)
+                            }
+
+                            public override fun failure(ex: ClientException) {
+                                it.failure(ex)
+                            }
+                        }
+                    )
+                }
             } ?: throw IOException("Failed to create file")
             id = createdFile.id
         }

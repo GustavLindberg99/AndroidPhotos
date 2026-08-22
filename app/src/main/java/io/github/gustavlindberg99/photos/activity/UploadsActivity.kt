@@ -1,8 +1,10 @@
 package io.github.gustavlindberg99.photos.activity
 
 import android.os.Bundle
+import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.graphics.drawable.toDrawable
@@ -17,7 +19,9 @@ import io.github.gustavlindberg99.photos.storage_client.StorageClient
 import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
 
 class UploadsActivity : StorageManagerActivity() {
+    private val _scrollView: ScrollView by lazy { this.findViewById(R.id.UploadsActivity_scrollView) }
     private val _listLayout: LinearLayout by lazy { this.findViewById(R.id.UploadsActivity_listLayout) }
+    private val _noUploadsView: TextView by lazy { this.findViewById(R.id.UploadsActivity_noUploadsView) }
     private val _views = mutableMapOf<Media, TextView>()
 
     public override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,12 +39,16 @@ class UploadsActivity : StorageManagerActivity() {
         this.lifecycleScope.launch {
             for (client in this.storageClients()) {
                 for (photo in UploadManager.currentUploads(client)) {
-                    this.updateUploads(photo, client, UploadManager.UploadState.UPLOADING)
+                    this.updateUploads(photo, client, UploadManager.UPLOADING)
                 }
                 for (photo in UploadManager.queuedUploads(client)) {
-                    this.updateUploads(photo, client, UploadManager.UploadState.QUEUED)
+                    this.updateUploads(photo, client, UploadManager.QUEUED)
+                }
+                for (photo in UploadManager.failedUploads(client)) {
+                    this.updateUploads(photo, client, UploadManager.FAILED)
                 }
             }
+            this.updateNoUploadsView()
 
             UploadManager.setStateChangedListener(this::updateUploads)
         }
@@ -56,31 +64,42 @@ class UploadsActivity : StorageManagerActivity() {
      *
      * @param photo     The photo that was uploaded.
      * @param client    The storage client that was used to upload the photo.
-     * @param state     The state of the upload.
+     * @param progress  The progress of the upload.
      */
-    private fun updateUploads(
-        photo: Media,
-        client: StorageClient,
-        state: UploadManager.UploadState
-    ) {
-        if (state == UploadManager.UploadState.FINISHED) {
+    private fun updateUploads(photo: Media, client: StorageClient, progress: Int) {
+        if (progress == UploadManager.FINISHED) {
             val view = this._views.remove(photo)
             val parent = view?.parent as? ViewGroup
             parent?.removeView(view)
         }
         else {
             val existingView = this._views[photo]
-            val text =
-                if (state == UploadManager.UploadState.QUEUED) this.getString(
+            val text = when (progress) {
+                UploadManager.QUEUED -> this.getString(
                     R.string.photoQueued,
                     photo.fileName,
                     client.name
                 )
-                else this.getString(
+
+                UploadManager.UPLOADING -> this.getString(
                     R.string.photoUploading,
                     photo.fileName,
                     client.name
                 )
+
+                UploadManager.FAILED -> this.getString(
+                    R.string.uploadFailed,
+                    photo.fileName,
+                    client.name
+                )
+
+                else -> this.getString(
+                    R.string.uploadProgress,
+                    photo.fileName,
+                    client.name,
+                    progress
+                )
+            }
 
             if (existingView != null) {
                 existingView.text = text
@@ -102,6 +121,22 @@ class UploadsActivity : StorageManagerActivity() {
                 this._listLayout.addView(textView)
                 this._views[photo] = textView
             }
+
+            this.updateNoUploadsView()
+        }
+    }
+
+    /**
+     * Updates the view that shows if there are no uploads.
+     */
+    private fun updateNoUploadsView() {
+        if (this._views.isEmpty()) {
+            this._noUploadsView.visibility = View.VISIBLE
+            this._scrollView.visibility = View.GONE
+        }
+        else {
+            this._noUploadsView.visibility = View.GONE
+            this._scrollView.visibility = View.VISIBLE
         }
     }
 }

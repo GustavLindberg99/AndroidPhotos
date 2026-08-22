@@ -70,6 +70,8 @@
     <string name="uploads">Uppladdningar</string>
     <string name="photoQueued">%s → %s\nI kö</string>
     <string name="photoUploading">%s → %s\nLaddar upp</string>
+    <string name="uploadFailed">%s → %s\nFel</string>
+    <string name="uploadProgress">%s → %s\nLaddar upp (%d%%)</string>
     <string name="chooseTimezone">Välj tidszon</string>
     <string name="failedToPlayVideo">Kunde inte spela upp video: %s</string>
     <string name="duration">Längd: %d sekunder</string>
@@ -80,4 +82,6 @@
     </plurals>
     <string name="uploaded">Uppladdad</string>
     <string name="video">Video</string>
+    <string name="noUploads">Inget foto håller på att laddas up</string>
+    <string name="failed">Fel</string>
 </resources>

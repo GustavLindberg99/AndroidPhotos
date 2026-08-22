@@ -70,6 +70,8 @@
     <string name="uploads">Téléchargements</string>
     <string name="photoQueued">%s → %s\nEn attente</string>
     <string name="photoUploading">%s → %s\nTéléchargement</string>
+    <string name="uploadFailed">%s → %s\nErreur</string>
+    <string name="uploadProgress">%s → %s\nTéléchargement (%d%%)</string>
     <string name="chooseTimezone">Choisir un fuseau horaire</string>
     <string name="failedToPlayVideo">Impossible de lire la vidéo: %s</string>
     <string name="duration">Durée: %d secondes</string>
@@ -80,4 +82,6 @@
     </plurals>
     <string name="uploaded">Sauvegardé</string>
     <string name="video">Vidéo</string>
+    <string name="noUploads">Aucune photo n\'est en cours de téléchargement</string>
+    <string name="failed">Erreur</string>
 </resources>

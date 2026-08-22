@@ -89,7 +89,7 @@ class LocalStorageClient private constructor(
         return this.allMediaEntries().map { UriHandle(it.third) }.toSet()
     }
 
-    public override suspend fun save(photo: Media) {
+    public override suspend fun save(photo: Media, progressListener: (Int) -> Unit) {
         val contentValues = ContentValues()
         contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, photo.fileName)
         contentValues.put(MediaStore.MediaColumns.MIME_TYPE, photo.mimeType)

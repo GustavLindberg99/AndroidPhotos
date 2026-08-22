@@ -8,11 +8,15 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.lifecycleScope
 import com.github.gustavlindberg99.androidsuspendutils.async
+import com.github.gustavlindberg99.androidsuspendutils.launch
+import com.github.gustavlindberg99.androidsuspendutils.withContext
 import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.collections.mutableSetOf
 import kotlin.coroutines.resume
 import kotlin.reflect.KClass
 import kotlin.reflect.full.companionObjectInstance
@@ -23,15 +27,18 @@ object UploadManager : LifecycleOwner {
         mutableMapOf<KClass<out StorageClient>, LinkedHashMap<Media, MutableSet<CancellableContinuation<Unit>>>>()
     private val _currentUploads =
         mutableMapOf<KClass<out StorageClient>, MutableMap<Media, Deferred<Media>>>()
-    private val _stateChangedListeners = mutableSetOf<(Media, StorageClient, UploadState) -> Unit>()
+    private val _failedUploads = mutableMapOf<KClass<out StorageClient>, MutableSet<Media>>()
+
+    private val _stateChangedListeners = mutableSetOf<(Media, StorageClient, Int) -> Unit>()
 
     public override val lifecycle = LifecycleRegistry(this)
 
     private const val MAX_SIMULTANEOUS_UPLOADS = 10
 
-    public enum class UploadState {
-        QUEUED, UPLOADING, FINISHED
-    }
+    public const val QUEUED = -4
+    public const val UPLOADING = -3
+    public const val FAILED = -2
+    public const val FINISHED = -1
 
     init {
         this.lifecycle.currentState = Lifecycle.State.RESUMED
@@ -44,6 +51,7 @@ object UploadManager : LifecycleOwner {
     fun reset() {
         this._queuedUploads.clear()
         this._currentUploads.clear()
+        this._failedUploads.clear()
         this._stateChangedListeners.clear()
     }
 
@@ -57,7 +65,11 @@ object UploadManager : LifecycleOwner {
      */
     public suspend fun save(client: StorageClient, photo: Media) {
         this.upload(client, photo, {
-            client.save(photo)
+            client.save(photo, { progress ->
+                UploadManager.lifecycleScope.launch {
+                    this.notifyListeners(photo, client, progress)
+                }
+            })
             return@upload photo
         })
     }
@@ -93,6 +105,9 @@ object UploadManager : LifecycleOwner {
         this._currentUploads[client::class] = currentUploads
         val pendingUploads = this._queuedUploads[client::class] ?: LinkedHashMap()
         this._queuedUploads[client::class] = pendingUploads
+        val failedUploads = this._failedUploads[client::class] ?: mutableSetOf()
+        this._failedUploads[client::class] = failedUploads
+        failedUploads.remove(photo)
 
         // Queue the photo if there are too many uploads already
         if (currentUploads.size >= MAX_SIMULTANEOUS_UPLOADS) {
@@ -102,8 +117,8 @@ object UploadManager : LifecycleOwner {
                 pendingUploads[photo] = continuations
                 continuations.add(it)
                 if (callListeners) {
-                    for (listener in this._stateChangedListeners) {
-                        listener(photo, client, UploadState.QUEUED)
+                    UploadManager.lifecycleScope.launch {
+                        this.notifyListeners(photo, client, QUEUED)
                     }
                 }
             }
@@ -118,18 +133,19 @@ object UploadManager : LifecycleOwner {
         // Upload the photo
         val promise = this.lifecycleScope.async { action() }
         currentUploads[photo] = promise
-        for (listener in this._stateChangedListeners) {
-            listener(photo, client, UploadState.UPLOADING)
-        }
+        this.notifyListeners(photo, client, UPLOADING)
         try {
             return promise.await()
+        }
+        catch (e: Exception) {
+            this.notifyListeners(photo, client, FAILED)
+            failedUploads.add(photo)
+            throw e
         }
         finally {
             @Suppress("DeferredResultUnused")
             currentUploads.remove(photo)
-            for (listener in this._stateChangedListeners) {
-                listener(photo, client, UploadState.FINISHED)
-            }
+            this.notifyListeners(photo, client, FINISHED)
 
             // Upload the next photo in the queue
             if (!pendingUploads.isEmpty()) {
@@ -161,11 +177,53 @@ object UploadManager : LifecycleOwner {
     }
 
     /**
+     * Gets the photos that failed to be uploaded to the given client.
+     *
+     * @param client    The client to get the photos for.
+     */
+    public fun failedUploads(client: StorageClient): Set<Media> {
+        return this._failedUploads[client::class] ?: emptySet()
+    }
+
+    /**
+     * Checks if the given photo is queued to be uploaded to any client.
+     *
+     * @param photo The photo to check.
+     *
+     * @return True if the photo is queued, false otherwise.
+     */
+    public fun isQueued(photo: Media): Boolean {
+        return this._queuedUploads.values.any { it.containsKey(photo) }
+    }
+
+    /**
+     * Checks if the given photo is currently being uploaded to any client.
+     *
+     * @param photo The photo to check.
+     *
+     * @return True if the photo is being uploaded, false otherwise.
+     */
+    public fun isUploading(photo: Media): Boolean {
+        return this._currentUploads.values.any { it.containsKey(photo) }
+    }
+
+    /**
+     * Checks if the given photo failed being uploaded to any client.
+     *
+     * @param photo The photo to check.
+     *
+     * @return True if the upload failed, false otherwise.
+     */
+    public fun hasFailed(photo: Media): Boolean {
+        return this._failedUploads.values.any { photo in it }
+    }
+
+    /**
      * Sets a listener that is called when the state of a photo changes.
      *
-     * @param listener  The listener to set.
+     * @param listener  The listener to set. The third parameter will be called with QUEUED when the upload is queued, UPLOADING when the upload has started but no progress is available yet, the progress between 0 and 100 when the upload progresses, and FINISHED when the upload is finished.
      */
-    public fun setStateChangedListener(listener: (Media, StorageClient, UploadState) -> Unit) {
+    public fun setStateChangedListener(listener: (Media, StorageClient, Int) -> Unit) {
         this._stateChangedListeners.add(listener)
     }
 
@@ -174,7 +232,7 @@ object UploadManager : LifecycleOwner {
      *
      * @param listener  The listener to remove.
      */
-    public fun removeStateChangedListener(listener: (Media, StorageClient, UploadState) -> Unit) {
+    public fun removeStateChangedListener(listener: (Media, StorageClient, Int) -> Unit) {
         this._stateChangedListeners.remove(listener)
     }
 
@@ -195,5 +253,20 @@ object UploadManager : LifecycleOwner {
             companion.PREFERENCES_KEY,
             Context.MODE_PRIVATE
         )
+    }
+
+    /**
+     * Notifies all listeners that the state of the given photo has changed.
+     *
+     * @param photo     The photo that has changed.
+     * @param client    The client that the photo has changed for.
+     * @param progress  The progress of the upload.
+     */
+    private suspend fun notifyListeners(photo: Media, client: StorageClient, progress: Int) {
+        withContext(Dispatchers.Main.immediate) {
+            for (listener in this._stateChangedListeners) {
+                listener(photo, client, progress)
+            }
+        }
     }
 }

@@ -48,7 +48,7 @@ class UploadManagerTest : PhotoTestBase() {
 
         // Use strings representing file names instead of photo objects to distinguish between duplicate photos
         val uploadedPhotos = mutableSetOf<String>()
-        val calledListeners = mutableMapOf<String, UploadManager.UploadState>()
+        val calledListeners = mutableMapOf<String, Int>()
         UploadManager.setStateChangedListener { photo, _, state ->
             calledListeners[photo.fileName] = state
         }
@@ -71,18 +71,18 @@ class UploadManagerTest : PhotoTestBase() {
         // Assert that the correct listeners have been called
         assertEquals(
             calledListeners, mapOf(
-                photo1.fileName to UploadManager.UploadState.UPLOADING,
+                photo1.fileName to UploadManager.UPLOADING,
                 // photo2 is a duplicate and should be missing because the listener should only be called once per photo
-                photo3.fileName to UploadManager.UploadState.UPLOADING,
-                photo4.fileName to UploadManager.UploadState.UPLOADING,
-                photo5.fileName to UploadManager.UploadState.UPLOADING,
-                photo6.fileName to UploadManager.UploadState.UPLOADING,
-                photo7.fileName to UploadManager.UploadState.UPLOADING,
-                photo8.fileName to UploadManager.UploadState.UPLOADING,
-                photo9.fileName to UploadManager.UploadState.UPLOADING,
-                photo10.fileName to UploadManager.UploadState.UPLOADING,
-                photo11.fileName to UploadManager.UploadState.UPLOADING,
-                photo12.fileName to UploadManager.UploadState.QUEUED
+                photo3.fileName to UploadManager.UPLOADING,
+                photo4.fileName to UploadManager.UPLOADING,
+                photo5.fileName to UploadManager.UPLOADING,
+                photo6.fileName to UploadManager.UPLOADING,
+                photo7.fileName to UploadManager.UPLOADING,
+                photo8.fileName to UploadManager.UPLOADING,
+                photo9.fileName to UploadManager.UPLOADING,
+                photo10.fileName to UploadManager.UPLOADING,
+                photo11.fileName to UploadManager.UPLOADING,
+                photo12.fileName to UploadManager.QUEUED
                 // photo13 is a duplicate and should be missing because the listener should only be called once per photo
             )
         )
@@ -113,18 +113,18 @@ class UploadManagerTest : PhotoTestBase() {
         // Assert that the correct listeners have been called
         assertEquals(
             calledListeners, mapOf(
-                photo1.fileName to UploadManager.UploadState.FINISHED,
+                photo1.fileName to UploadManager.FINISHED,
                 // photo2 is a duplicate and should be missing because the listener should only be called once per photo
-                photo3.fileName to UploadManager.UploadState.FINISHED,
-                photo4.fileName to UploadManager.UploadState.FINISHED,
-                photo5.fileName to UploadManager.UploadState.FINISHED,
-                photo6.fileName to UploadManager.UploadState.FINISHED,
-                photo7.fileName to UploadManager.UploadState.FINISHED,
-                photo8.fileName to UploadManager.UploadState.FINISHED,
-                photo9.fileName to UploadManager.UploadState.FINISHED,
-                photo10.fileName to UploadManager.UploadState.FINISHED,
-                photo11.fileName to UploadManager.UploadState.FINISHED,
-                photo12.fileName to UploadManager.UploadState.UPLOADING
+                photo3.fileName to UploadManager.FINISHED,
+                photo4.fileName to UploadManager.FINISHED,
+                photo5.fileName to UploadManager.FINISHED,
+                photo6.fileName to UploadManager.FINISHED,
+                photo7.fileName to UploadManager.FINISHED,
+                photo8.fileName to UploadManager.FINISHED,
+                photo9.fileName to UploadManager.FINISHED,
+                photo10.fileName to UploadManager.FINISHED,
+                photo11.fileName to UploadManager.FINISHED,
+                photo12.fileName to UploadManager.UPLOADING
                 // photo13 is a duplicate and should be missing because the listener should only be called once per photo
             )
         )
@@ -165,18 +165,18 @@ class UploadManagerTest : PhotoTestBase() {
         // Assert that the correct listeners have been called
         assertEquals(
             calledListeners, mapOf(
-                photo1.fileName to UploadManager.UploadState.FINISHED,
+                photo1.fileName to UploadManager.FINISHED,
                 // photo2 is a duplicate and should be missing because the listener should only be called once per photo
-                photo3.fileName to UploadManager.UploadState.FINISHED,
-                photo4.fileName to UploadManager.UploadState.FINISHED,
-                photo5.fileName to UploadManager.UploadState.FINISHED,
-                photo6.fileName to UploadManager.UploadState.FINISHED,
-                photo7.fileName to UploadManager.UploadState.FINISHED,
-                photo8.fileName to UploadManager.UploadState.FINISHED,
-                photo9.fileName to UploadManager.UploadState.FINISHED,
-                photo10.fileName to UploadManager.UploadState.FINISHED,
-                photo11.fileName to UploadManager.UploadState.FINISHED,
-                photo12.fileName to UploadManager.UploadState.FINISHED
+                photo3.fileName to UploadManager.FINISHED,
+                photo4.fileName to UploadManager.FINISHED,
+                photo5.fileName to UploadManager.FINISHED,
+                photo6.fileName to UploadManager.FINISHED,
+                photo7.fileName to UploadManager.FINISHED,
+                photo8.fileName to UploadManager.FINISHED,
+                photo9.fileName to UploadManager.FINISHED,
+                photo10.fileName to UploadManager.FINISHED,
+                photo11.fileName to UploadManager.FINISHED,
+                photo12.fileName to UploadManager.FINISHED
                 // photo13 is a duplicate and should be missing because the listener should only be called once per photo
             )
         )

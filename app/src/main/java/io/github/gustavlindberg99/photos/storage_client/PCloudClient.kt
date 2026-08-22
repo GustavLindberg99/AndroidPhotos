@@ -12,7 +12,6 @@ import androidx.core.net.toUri
 import androidx.media3.common.util.UnstableApi
 import com.github.gustavlindberg99.androidsuspendutils.SuspendableLauncher
 import com.github.gustavlindberg99.androidsuspendutils.flow
-import com.github.gustavlindberg99.androidsuspendutils.useWithContext
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import com.pcloud.sdk.ApiClient
 import com.pcloud.sdk.ApiError
@@ -43,7 +42,9 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import okio.BufferedSink
 import okio.ByteString
+import okio.source
 import java.io.IOException
 import java.io.InputStream
 import java.net.URLConnection
@@ -99,7 +100,7 @@ class PCloudClient private constructor(
         }
     }
 
-    public override suspend fun save(photo: Media) {
+    public override suspend fun save(photo: Media, progressListener: (Int) -> Unit) {
         // Create the "My Pictures" folder if it doesn't already exist
         val picturesFolder = getPicturesFolder() ?: withContext(Dispatchers.IO) {
             _apiClient.createFolder("/" + photosFolder(this._context)).execute()
@@ -115,15 +116,27 @@ class PCloudClient private constructor(
         // Upload the file
         val id: Long
         if (existingFile == null) {
-            val bytes = photo.getInputStream(this._context)
-                .useWithContext(Dispatchers.IO) { it.readBytes() }
+            val inputStream = photo.getInputStream(this._context)
+            val size = (photo.handles[LocalStorageClient::class] ?: photo.handles.values.first())
+                .getSize(this._context)
+
+            val dataSource = object : DataSource() {
+                public override fun contentLength() = size
+                public override fun writeTo(sink: BufferedSink) {
+                    inputStream.source().use { sink.writeAll(it) }
+                }
+            }
+
             val file = withContext(Dispatchers.IO) {
                 this._apiClient.createFile(
                     picturesFolder,
                     photo.fileName,
-                    DataSource.create(bytes)
+                    dataSource,
+                    photo.dateTime(),
+                    { done, total -> progressListener((done * 100 / total).toInt()) }
                 ).execute()
             }
+
             id = file.fileId()
         }
         else {

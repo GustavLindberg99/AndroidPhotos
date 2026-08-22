@@ -15,13 +15,14 @@ import androidx.credentials.CredentialManager
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import com.github.gustavlindberg99.androidsuspendutils.SuspendableLauncher
-import com.github.gustavlindberg99.androidsuspendutils.useWithContext
 import com.github.gustavlindberg99.androidsuspendutils.flow
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
+import com.google.api.client.googleapis.media.MediaHttpUploader
 import com.google.api.client.http.ByteArrayContent
+import com.google.api.client.http.InputStreamContent
 import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.drive.Drive
@@ -161,12 +162,13 @@ class GoogleDriveClient private constructor(
         return this.allPhotoFiles(photosFolderId).map { GoogleDriveFileHandle(it.id) }.toSet()
     }
 
-    public override suspend fun save(photo: Media) {
+    public override suspend fun save(photo: Media, progressListener: (Int) -> Unit) {
         // Create the Photos folder if it doesn't already exist
-        val bytes =
-            photo.getInputStream(this._context).useWithContext(Dispatchers.IO) { it.readBytes() }
-        val mimeType = photo.mimeType
-        val content = ByteArrayContent(mimeType, bytes)
+        val inputStream = photo.getInputStream(this._context)
+        val size = (photo.handles[LocalStorageClient::class] ?: photo.handles.values.first())
+            .getSize(this._context)
+        val content = InputStreamContent(photo.mimeType, inputStream)
+        content.length = size
         val photosFolderId =
             if (photosFolder(this._context) == "") "root"
             else this._photosFolderManager.getPhotosFolder()?.id
@@ -183,7 +185,16 @@ class GoogleDriveClient private constructor(
             file.name = photo.fileName
             file.parents = listOf(photosFolderId)
             id = withContext(Dispatchers.IO) {
-                this._service.files().create(file, content).setFields("id").execute().id
+                this._service.files()
+                    .create(file, content)
+                    .also {
+                        it.mediaHttpUploader.setProgressListener { uploader ->
+                            if (uploader.uploadState == MediaHttpUploader.UploadState.MEDIA_IN_PROGRESS) {
+                                progressListener((uploader.progress * 100).toInt())
+                            }
+                        }
+                    }
+                    .setFields("id").execute().id
             }
         }
         else {
