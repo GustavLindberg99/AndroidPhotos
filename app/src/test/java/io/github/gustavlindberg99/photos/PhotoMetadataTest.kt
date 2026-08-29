@@ -3,7 +3,7 @@ package io.github.gustavlindberg99.photos
 import io.github.gustavlindberg99.photos.metadata_parser.PhotoMetadataParser
 import io.github.gustavlindberg99.photos.mock.StorageManagerActivityMock
 import io.github.gustavlindberg99.photos.mock.FileHandleMock
-import io.github.gustavlindberg99.photos.mock.StorageClientMock
+import io.github.gustavlindberg99.photos.mock.StorageClientMock.Companion.HandleList
 import io.github.gustavlindberg99.photos.photo.Photo
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -47,7 +47,7 @@ class PhotoMetadataTest {
             "5d22e5a99daf5a2683b845b43959feb52bfbec14",
             metadataParser.dateTime(),
             metadataParser.timezone(),
-            mutableMapOf(StorageClientMock::class to handle)
+            HandleList(mockHandle = handle)
         )
 
         val rotation = 90
@@ -79,7 +79,7 @@ class PhotoMetadataTest {
             "5d22e5a99daf5a2683b845b43959feb52bfbec14",
             metadataParser.dateTime(),
             metadataParser.timezone(),
-            mutableMapOf(StorageClientMock::class to handle)
+            HandleList(mockHandle = handle)
         )
 
         val newLocation = GeoPoint(39.74, -104.99)
@@ -111,7 +111,7 @@ class PhotoMetadataTest {
             "5d22e5a99daf5a2683b845b43959feb52bfbec14",
             metadataParser.dateTime(),
             metadataParser.timezone(),
-            mutableMapOf(StorageClientMock::class to handle)
+            HandleList(mockHandle = handle)
         )
 
         val newTimezone = "-06:00"

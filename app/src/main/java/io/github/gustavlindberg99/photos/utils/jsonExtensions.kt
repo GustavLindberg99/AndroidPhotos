@@ -13,18 +13,3 @@ import org.json.JSONObject
 public fun JSONArray.toJsonObjectList(): List<JSONObject> {
     return List(this.length(), { index -> this.getJSONObject(index) })
 }
-
-/**
- * Converts a [JSONObject] to a `Map<String, String>`.
- *
- * @return A map of strings.
- *
- * @throws org.json.JSONException If the object contains elements that are not strings.
- */
-public fun JSONObject.toStringMap(): Map<String, String> {
-    val result = mutableMapOf<String, String>()
-    for (key in this.keys()) {
-        result[key] = this.getString(key)
-    }
-    return result
-}

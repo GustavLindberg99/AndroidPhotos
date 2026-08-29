@@ -19,9 +19,8 @@ import com.github.gustavlindberg99.androidsuspendutils.launch
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
-import io.github.gustavlindberg99.photos.file_handle.FileHandle
+import io.github.gustavlindberg99.photos.file_handle.HandleList
 import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
-import io.github.gustavlindberg99.photos.storage_client.StorageClient
 import io.github.gustavlindberg99.photos.utils.patchMp4Dates
 import kotlinx.coroutines.Dispatchers
 import okio.FileNotFoundException
@@ -33,7 +32,6 @@ import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.reflect.KClass
 
 /**
  * Class representing a video.
@@ -57,15 +55,15 @@ class Video(
     location: GeoPoint?,
     sha1: String,
     private val _dateTime: String?,
-    handles: MutableMap<KClass<out StorageClient>, FileHandle>
+    handles: HandleList
 ) : Media(fileName, mimeType, width, height, rotation, location, sha1, handles) {
-    public override fun dateTime(): Date? {
+    public override val dateTime: Date? by lazy {
         try {
-            return SimpleDateFormat("yyyyMMdd'T'HHmmss.SSSX", Locale.US)
-                .parse(this._dateTime ?: return null)
+            return@lazy SimpleDateFormat("yyyyMMdd'T'HHmmss.SSSX", Locale.US)
+                .parse(this._dateTime ?: return@lazy null)
         }
         catch (_: ParseException) {
-            return null
+            return@lazy null
         }
     }
 
@@ -153,7 +151,7 @@ class Video(
         extractor.release()
 
         // Changing the metadata will change the creation date to the current time, so change it back
-        patchMp4Dates(tempFile, this.dateTime())
+        patchMp4Dates(tempFile, this.dateTime)
 
         // Extract the bytes and delete the temporary files
         val result = tempFile.readBytes()
@@ -173,10 +171,10 @@ class Video(
         context: StorageManagerActivity,
         playerView: PlayerView
     ) = context.lifecycleScope.launch {
-        val clients = context.storageClients().filter { it::class in this.handles }
+        val clients = context.storageClients().filter { this.handles.getHandle(it::class) != null }
         val client = clients.firstOrNull { it is LocalStorageClient } ?: clients.first()
 
-        val handle = this.handles[client::class]
+        val handle = this.handles.getHandle(client::class)
             ?: throw FileNotFoundException("Video has no handles")
         val datasourceFactory = client.dataFactory(context)
 

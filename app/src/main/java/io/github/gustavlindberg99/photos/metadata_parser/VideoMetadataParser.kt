@@ -20,26 +20,32 @@ class VideoMetadataParser private constructor(retriever: MediaMetadataRetriever)
     private val _duration: Long?
 
     init {
-        val rotation = retriever
-            .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
-            ?.toInt() ?: 0
-        val rotated = rotation == 90 || rotation == 270
-        val widthKey =
-            if (rotated) MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
-            else MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
-        val heightKey =
-            if (rotated) MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
-            else MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
+        @Suppress("ConvertTryFinallyToUseCall") // retriever does not implement closeable so this is not possible
+        try {
+            val rotation = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+                ?.toInt() ?: 0
+            val rotated = rotation == 90 || rotation == 270
+            val widthKey =
+                if (rotated) MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
+                else MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
+            val heightKey =
+                if (rotated) MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
+                else MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
 
-        this._width = retriever.extractMetadata(widthKey)?.toInt() ?: 0
-        this._height = retriever.extractMetadata(heightKey)?.toInt() ?: 0
-        this._locationString =
-            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_LOCATION)
-        this._dateTime = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)
-        this._thumbnail = retriever.getFrameAtTime(0)
-        this._duration = retriever
-            .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            ?.toLong()
+            this._width = retriever.extractMetadata(widthKey)?.toInt() ?: 0
+            this._height = retriever.extractMetadata(heightKey)?.toInt() ?: 0
+            this._locationString =
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_LOCATION)
+            this._dateTime = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)
+            this._thumbnail = retriever.getFrameAtTime(0)
+            this._duration = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLong()
+        }
+        finally {
+            retriever.close()
+        }
     }
 
     /**
@@ -68,7 +74,11 @@ class VideoMetadataParser private constructor(retriever: MediaMetadataRetriever)
      * @param length The length in bytes of the data.
      */
     @VisibleForTesting
-    constructor(fd: FileDescriptor, offset: Long, length: Long) : this(MediaMetadataRetriever().apply {
+    constructor(
+        fd: FileDescriptor,
+        offset: Long,
+        length: Long
+    ) : this(MediaMetadataRetriever().apply {
         setDataSource(fd, offset, length)
     })
 

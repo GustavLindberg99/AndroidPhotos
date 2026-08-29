@@ -15,7 +15,9 @@ import androidx.credentials.CredentialManager
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import com.github.gustavlindberg99.androidsuspendutils.SuspendableLauncher
-import com.github.gustavlindberg99.androidsuspendutils.flow
+import com.github.gustavlindberg99.androidsuspendutils.channelFlow
+import com.github.gustavlindberg99.androidsuspendutils.concurrentForEach
+import com.github.gustavlindberg99.androidsuspendutils.sortedByAsync
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
@@ -43,7 +45,9 @@ import io.github.gustavlindberg99.photos.photo.Video
 import io.github.gustavlindberg99.photos.storage_client_utils.PhotosFolderManager
 import io.github.gustavlindberg99.photos.data_source.HttpDataSource
 import io.github.gustavlindberg99.photos.data_source.HttpMediaDataSource
+import io.github.gustavlindberg99.photos.file_handle.HandleList
 import io.github.gustavlindberg99.photos.file_handle.UriHandle
+import io.github.gustavlindberg99.photos.storage_client_utils.getCachedSha1
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedThumbnailBySha1
 import io.github.gustavlindberg99.photos.utils.makeGeoPoint
 import io.ktor.client.HttpClient
@@ -144,14 +148,20 @@ class GoogleDriveClient private constructor(
         return GoogleDriveClient::class::qualifiedName.hashCode()
     }
 
-    public override fun getAllPhotos(): Flow<Media> = flow { f ->
+    public override fun getAllPhotos(): Flow<Media> = channelFlow { f ->
         val photosFolderId =
             if (photosFolder(this._context) == "") "root"
-            else this._photosFolderManager.getPhotosFolder()?.id ?: return@flow
-        val files = this.allPhotoFiles(photosFolderId)
-        for (file in files) {
-            val photo = this.photoFromGoogleDriveFile(file) ?: continue
-            f.emit(photo)
+            else this._photosFolderManager.getPhotosFolder()?.id ?: return@channelFlow
+        val existingSha1s = PhotoManager.allPhotos(this._context)
+            .filter { it.handles.googleDriveHandle != null }
+            .map { it.sha1 }.toSet()
+
+        // Sort to put the SHA1s that don't exist yet first so that we don't need to wait too long to see new photos
+        val files = this.allPhotoFiles(photosFolderId).sortedByAsync { it.sha1() in existingSha1s }
+
+        files.concurrentForEach(this._context, 10) { file ->
+            val photo = this.photoFromGoogleDriveFile(file, file.sha1()) ?: return@concurrentForEach
+            f.send(photo)
         }
     }
 
@@ -165,8 +175,7 @@ class GoogleDriveClient private constructor(
     public override suspend fun save(photo: Media, progressListener: (Int) -> Unit) {
         // Create the Photos folder if it doesn't already exist
         val inputStream = photo.getInputStream(this._context)
-        val size = (photo.handles[LocalStorageClient::class] ?: photo.handles.values.first())
-            .getSize(this._context)
+        val size = photo.handles.preferredHandle().getSize(this._context)
         val content = InputStreamContent(photo.mimeType, inputStream)
         content.length = size
         val photosFolderId =
@@ -176,7 +185,7 @@ class GoogleDriveClient private constructor(
 
         // Check if the file is already uploaded
         val existingFiles = this.allPhotoFiles(photosFolderId)
-        val existingFile = existingFiles.find { it.sha1Checksum == photo.sha1 }
+        val existingFile = existingFiles.find { it.sha1() == photo.sha1 }
 
         // Upload the file
         val id: String
@@ -200,12 +209,13 @@ class GoogleDriveClient private constructor(
         else {
             id = existingFile.id
         }
-        photo.handles[this::class] = GoogleDriveFileHandle(id)
+        photo.handles.googleDriveHandle = GoogleDriveFileHandle(id)
         PhotoManager.update(this._context, photo)
     }
 
     public override suspend fun overwrite(oldPhoto: Media, newBytes: ByteArray): Media {
-        val handle = oldPhoto.handles[this::class] as GoogleDriveFileHandle
+        val handle = oldPhoto.handles.googleDriveHandle
+            ?: throw IOException("Photo is not on Google Drive")
         val newContent = ByteArrayContent(oldPhoto.mimeType, newBytes)
         val newFile = withContext(Dispatchers.IO) {
             // Using a new File() object for patch semantics ensures we only update the media content
@@ -218,19 +228,19 @@ class GoogleDriveClient private constructor(
         val sha1 = ByteString.of(*newBytes).sha1().hex()
         val newPhoto = this.photoFromGoogleDriveFile(newFile, sha1)
             ?: throw IOException("Cannot read from newly created photo")
-        oldPhoto.handles.remove(this::class)
+        oldPhoto.handles.googleDriveHandle = null
         PhotoManager.update(this._context, oldPhoto)
         return PhotoManager.update(this._context, newPhoto)
     }
 
     public override suspend fun delete(photo: Media) {
-        val handle = photo.handles[this::class] as GoogleDriveFileHandle
+        val handle = photo.handles.googleDriveHandle ?: return
         val content = File()
         content.trashed = true
         withContext(Dispatchers.IO) {
             this._service.files().update(handle.id, content).execute()
         }
-        photo.handles.remove(this::class)
+        photo.handles.googleDriveHandle = null
         PhotoManager.update(this._context, photo, delete = true)
     }
 
@@ -315,7 +325,7 @@ class GoogleDriveClient private constructor(
      */
     private suspend fun photoFromGoogleDriveFile(
         file: File,
-        sha1: String = file.sha1Checksum
+        sha1: String
     ): Media? = withContext(Dispatchers.IO) {
         val uri = this.idToUri(file.id)
 
@@ -366,7 +376,7 @@ class GoogleDriveClient private constructor(
                         sha1,
                         metadataParser.dateTime(),
                         metadataParser.timezone(),
-                        mutableMapOf(GoogleDriveClient::class to GoogleDriveFileHandle(file.id))
+                        HandleList(googleDriveHandle = GoogleDriveFileHandle(file.id))
                     )
                 }
 
@@ -381,7 +391,7 @@ class GoogleDriveClient private constructor(
                         location,
                         sha1,
                         metadataParser.dateTime(),
-                        mutableMapOf(GoogleDriveClient::class to GoogleDriveFileHandle(file.id))
+                        HandleList(googleDriveHandle = GoogleDriveFileHandle(file.id))
                     )
                 }
             }
@@ -403,6 +413,24 @@ class GoogleDriveClient private constructor(
         return "$URI_BASE/$id?alt=media".toUri()
     }
 
+    /**
+     * Gets the SHA1 of the given file, reading it from cache if needed. Needed because sometimes sha1Checksum is null, in which case it will be cached based on MD5.
+     *
+     * @return The SHA1 of the file.
+     */
+    private suspend fun File.sha1(): String {
+        val fetchedSha1 = this.sha1Checksum
+        if (fetchedSha1 != null) {
+            return fetchedSha1
+        }
+        val md5 = this.md5Checksum
+        return getCachedSha1(
+            this@GoogleDriveClient._context,
+            md5,
+            { this@GoogleDriveClient.getInputStream(this.id) }
+        )
+    }
+
     companion object : StorageClient.Companion {
         public override val PREFERENCES_KEY = "googleDrive"
         public override val DEFAULT_FOLDER = "Photos"
@@ -413,7 +441,7 @@ class GoogleDriveClient private constructor(
 
         // The fields needed for photoFromGoogleDriveFile() to work properly
         private const val PHOTO_FIELDS =
-            "id, name, mimeType, size, thumbnailLink, imageMediaMetadata, videoMediaMetadata, sha1Checksum"
+            "id, name, mimeType, size, thumbnailLink, imageMediaMetadata, videoMediaMetadata, sha1Checksum, md5Checksum"
 
         /**
          * Authenticates with Google Drive.

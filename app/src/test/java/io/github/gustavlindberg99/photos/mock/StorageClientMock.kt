@@ -4,10 +4,11 @@ import android.content.Context
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import com.github.gustavlindberg99.androidsuspendutils.flow
+import io.github.gustavlindberg99.photos.file_handle.HandleList
 import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.photo.Photo
-import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
+import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import kotlinx.coroutines.delay
 import okio.ByteString.Companion.toByteString
 import kotlin.time.Duration.Companion.milliseconds
@@ -47,7 +48,7 @@ class StorageClientMock(private val _context: Context) : StorageClient {
 
         val handle = FileHandleMock(photo.fileName)
         this.photos[handle] = photo
-        photo.handles[this::class] = handle
+        photo.handles.mockHandle = handle
         PhotoManager.update(this._context, photo)
     }
 
@@ -70,7 +71,7 @@ class StorageClientMock(private val _context: Context) : StorageClient {
             sha1,
             null,
             null,
-            mutableMapOf(this::class to handle)
+            HandleList(mockHandle = handle)
         )
         PhotoManager.update(this._context, oldPhoto)
         val updatedPhoto = PhotoManager.update(this._context, newPhoto)
@@ -86,11 +87,23 @@ class StorageClientMock(private val _context: Context) : StorageClient {
         }
 
         this.photos[FileHandleMock(photo.fileName)] = photo
-        photo.handles.remove(this::class)
+        photo.handles.mockHandle = null
         PhotoManager.update(this._context, photo)
     }
 
     public override suspend fun dataFactory(context: Context): DataSource.Factory {
         return DefaultDataSource.Factory(context)
+    }
+
+    companion object{
+        public var HandleList.mockHandle: FileHandleMock?
+            get() = this.getHandle(StorageClientMock::class) as FileHandleMock?
+            set(value) = this.setHandle(StorageClientMock::class, value)
+
+        public fun HandleList(mockHandle: FileHandleMock?): HandleList {
+            val result = HandleList()
+            result.mockHandle = mockHandle
+            return result
+        }
     }
 }

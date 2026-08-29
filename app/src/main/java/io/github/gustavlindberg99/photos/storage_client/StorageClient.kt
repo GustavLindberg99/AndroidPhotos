@@ -57,7 +57,7 @@ interface StorageClient {
     public suspend fun overwrite(oldPhoto: Media, newBytes: ByteArray): Media
 
     /**
-     * Delete a photo from the storage client.
+     * Delete a photo from the storage client. Does nothing if the photo is already deleted.
      *
      * @param photo The photo to delete. Removes the URI for this client from this photo.
      *

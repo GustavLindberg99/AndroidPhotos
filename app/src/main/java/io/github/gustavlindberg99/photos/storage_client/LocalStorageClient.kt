@@ -17,11 +17,13 @@ import androidx.core.content.ContextCompat
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import com.github.gustavlindberg99.androidsuspendutils.SuspendableLauncher
-import com.github.gustavlindberg99.androidsuspendutils.flow
+import com.github.gustavlindberg99.androidsuspendutils.channelFlow
+import com.github.gustavlindberg99.androidsuspendutils.concurrentForEach
 import com.github.gustavlindberg99.androidsuspendutils.useWithContext
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
+import io.github.gustavlindberg99.photos.file_handle.HandleList
 import io.github.gustavlindberg99.photos.file_handle.UriHandle
 import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
@@ -56,32 +58,29 @@ class LocalStorageClient private constructor(
         return LocalStorageClient::class::qualifiedName.hashCode()
     }
 
-    public override fun getAllPhotos(): Flow<Media> = flow { f ->
-        for ((fileName, mimeType, uri) in this.allMediaEntries()) {
-            val sha1 = HashingSink.sha1(blackholeSink())
-            try {
-                this._context.contentResolver.openInputStream(uri)
-                    ?.useWithContext(Dispatchers.IO) { it.source().buffer().readAll(sha1) }
-                    ?: continue
-            }
-            catch (_: FileNotFoundException) {
-                // This race condition can happen after deleting a file. If it happens, ignore it, since it means the file is deleted.
-                continue
-            }
+    public override fun getAllPhotos(): Flow<Media> = channelFlow { f ->
+        val existingFileNames = PhotoManager.allPhotos(this._context)
+            .filter { it.handles.localStorageHandle != null }
+            .map { it.fileName }.toSet()
+
+        // Sort to put the file names that don't exist yet first so that we don't need to wait too long to see new photos (using the SHA1s would have slower but been more reliable, but since the only reason to sort this is for optimization, it's better to use the faster and less reliable option)
+        val allMediaEntries = this.allMediaEntries().sortedBy { it.first in existingFileNames }
+
+        allMediaEntries.concurrentForEach(this._context, 10) { (fileName, mimeType, uri) ->
             val photo = try {
                 getCachedPhotoBySha1(
                     this._context,
                     fileName,
                     mimeType,
-                    sha1.hash.hex(),
-                    mutableMapOf(LocalStorageClient::class to UriHandle(uri))
-                ) ?: continue
+                    this.sha1FromUri(uri) ?: return@concurrentForEach,
+                    HandleList(localStorageHandle = UriHandle(uri))
+                ) ?: return@concurrentForEach
             }
             catch (e: Exception) {
                 Log.w(this.javaClass.name, e.message, e)
-                continue
+                return@concurrentForEach
             }
-            f.emit(photo)
+            f.send(photo)
         }
     }
 
@@ -93,7 +92,7 @@ class LocalStorageClient private constructor(
         val contentValues = ContentValues()
         contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, photo.fileName)
         contentValues.put(MediaStore.MediaColumns.MIME_TYPE, photo.mimeType)
-        val dateTime = photo.dateTime()
+        val dateTime = photo.dateTime
         if (dateTime != null) {
             contentValues.put(MediaStore.MediaColumns.DATE_TAKEN, dateTime.time)
         }
@@ -142,12 +141,13 @@ class LocalStorageClient private constructor(
             contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
             this._context.contentResolver.update(uri, contentValues, null, null)
         }
-        photo.handles[this::class] = UriHandle(uri)
+        photo.handles.localStorageHandle = UriHandle(uri)
         PhotoManager.update(this._context, photo)
     }
 
     public override suspend fun overwrite(oldPhoto: Media, newBytes: ByteArray): Media {
-        val handle = oldPhoto.handles[this::class] as UriHandle
+        val handle = oldPhoto.handles.localStorageHandle
+            ?: throw IOException("Photo is not on local storage")
 
         this.askForPermissionIfNeeded {
             this._context.contentResolver.openOutputStream(handle.uri())?.use { output ->
@@ -163,21 +163,21 @@ class LocalStorageClient private constructor(
             oldPhoto.fileName,
             oldPhoto.mimeType,
             newSha1,
-            mutableMapOf(this::class to handle)
+            HandleList(localStorageHandle = handle)
         ) ?: throw IOException("Cannot read from newly created photo")
-        oldPhoto.handles.remove(this::class)
+        oldPhoto.handles.localStorageHandle = null
         PhotoManager.update(this._context, oldPhoto)
         return PhotoManager.update(this._context, newPhoto)
     }
 
     public override suspend fun delete(photo: Media) {
-        val handle = photo.handles[this::class] as UriHandle
+        val handle = photo.handles.localStorageHandle ?: return
 
         this.askForPermissionIfNeeded {
             this._context.contentResolver.delete(handle.uri(), null, null)
         }
 
-        photo.handles.remove(this::class)
+        photo.handles.localStorageHandle = null
         PhotoManager.update(this._context, photo, delete = true)
     }
 
@@ -261,6 +261,27 @@ class LocalStorageClient private constructor(
             }
         }
         return@withContext result
+    }
+
+    /**
+     * Gets the SHA1 hash of the file at the given URI.
+     *
+     * @param uri   The URI of the file. Must be a local URI.
+     *
+     * @return The SHA1 hash of the file, or null if the file doesn't exist.
+     */
+    private suspend fun sha1FromUri(uri: Uri): String? {
+        val sha1 = HashingSink.sha1(blackholeSink())
+        try {
+            this._context.contentResolver.openInputStream(uri)
+                ?.useWithContext(Dispatchers.IO) { it.source().buffer().readAll(sha1) }
+                ?: return null
+        }
+        catch (_: FileNotFoundException) {
+            // This race condition can happen after deleting a file. If it happens, ignore it, since it means the file is deleted.
+            return null
+        }
+        return sha1.hash.hex()
     }
 
     companion object {

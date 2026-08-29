@@ -2,12 +2,12 @@ package io.github.gustavlindberg99.photos
 
 import android.net.Uri
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.gustavlindberg99.photos.file_handle.HandleList
 import io.github.gustavlindberg99.photos.mock.ByteArrayDataSource
 import io.github.gustavlindberg99.photos.file_handle.UriHandle
 import io.github.gustavlindberg99.photos.metadata_parser.VideoMetadataParser
 import io.github.gustavlindberg99.photos.mock.StorageManagerActivityMock
 import io.github.gustavlindberg99.photos.photo.Video
-import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -53,7 +53,7 @@ class VideoMetadataTest {
             metadataParser.location(),
             "e54dc1462fa8324704a47616b29ec4520b722b43",
             metadataParser.dateTime(),
-            mutableMapOf(LocalStorageClient::class to handle)
+            HandleList(localStorageHandle = handle)
         )
 
         val rotation = 90
@@ -91,7 +91,7 @@ class VideoMetadataTest {
             metadataParser.location(),
             "e54dc1462fa8324704a47616b29ec4520b722b43",
             metadataParser.dateTime(),
-            mutableMapOf(LocalStorageClient::class to handle)
+            HandleList(localStorageHandle = handle)
         )
 
         val newLocation = GeoPoint(39.74, -104.99)

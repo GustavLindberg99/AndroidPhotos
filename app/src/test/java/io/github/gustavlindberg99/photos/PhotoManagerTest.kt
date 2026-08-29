@@ -73,8 +73,8 @@ class PhotoManagerTest : PhotoTestBase() {
         assertEquals(removedPhotos, setOf(photo3))
 
         // The Google Drive client should have been removed from photo4 and photo5
-        assertEquals(photo1.handles.keys, setOf(LocalStorageClient::class))
-        assertEquals(photo4.handles.keys, setOf(LocalStorageClient::class))
-        assertEquals(photo5.handles.keys, setOf(LocalStorageClient::class))
+        assertEquals(photo1.handles.clients(), setOf(LocalStorageClient::class))
+        assertEquals(photo4.handles.clients(), setOf(LocalStorageClient::class))
+        assertEquals(photo5.handles.clients(), setOf(LocalStorageClient::class))
     }
 }

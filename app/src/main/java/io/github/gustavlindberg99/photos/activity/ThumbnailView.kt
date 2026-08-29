@@ -16,7 +16,6 @@ import androidx.lifecycle.lifecycleScope
 import com.github.gustavlindberg99.androidsuspendutils.launch
 import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.photo.Video
-import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client_utils.UploadManager
 import kotlinx.coroutines.Job
@@ -71,7 +70,7 @@ class ThumbnailView(
             !this.photoSelected &&
             !isUploading &&
             !failed &&
-            photo.handles.keys.any { it != LocalStorageClient::class }
+            photo.handles.isBackedUp()
         )
 
         this._uploadingMarker.changeVisibility(!this.photoSelected && isUploading)
@@ -109,14 +108,18 @@ class ThumbnailView(
 
         val lp = (this.layoutParams as? FlexboxLayoutManager.LayoutParams)
             ?: FlexboxLayoutManager.LayoutParams(width, height)
-        lp.width = width
-        lp.height = height
-        this.layoutParams = lp
+        if (this.layoutParams == null || lp.width != width || lp.height != height) {
+            lp.width = width
+            lp.height = height
+            this.layoutParams = lp
+        }
 
         val imageLp = this._thumbnail.layoutParams ?: FrameLayout.LayoutParams(width, height)
-        imageLp.width = width
-        imageLp.height = height
-        this._thumbnail.layoutParams = imageLp
+        if (this._thumbnail.layoutParams == null || imageLp.width != width || imageLp.height != height) {
+            imageLp.width = width
+            imageLp.height = height
+            this._thumbnail.layoutParams = imageLp
+        }
 
         this._videoMarker.changeVisibility(photo is Video)
         this.updateCloudStatus()

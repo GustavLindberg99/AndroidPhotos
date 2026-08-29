@@ -2,9 +2,8 @@ package io.github.gustavlindberg99.photos
 
 import androidx.core.net.toUri
 import io.github.gustavlindberg99.photos.file_handle.GoogleDriveFileHandle
+import io.github.gustavlindberg99.photos.file_handle.HandleList
 import io.github.gustavlindberg99.photos.file_handle.UriHandle
-import io.github.gustavlindberg99.photos.storage_client.GoogleDriveClient
-import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -39,26 +38,5 @@ class PhotoTest : PhotoTestBase() {
         assertTrue(photo1 > photo4) // Because of time zones
         assertTrue(photo1 < photo5)
         assertTrue(photo4 < photo5)
-    }
-
-    @Test
-    fun mergePhotos() {
-        photo2.mergeHandlesWith(photo1, delete = false)
-        assertEquals(
-            photo2.handles, mapOf(
-                LocalStorageClient::class to UriHandle("file://fake-filesystem/photo1.jpg".toUri()),
-                GoogleDriveClient::class to GoogleDriveFileHandle("id2")
-            )
-        )
-    }
-
-    @Test
-    fun mergePhotosDelete() {
-        photo12.mergeHandlesWith(photo13, delete = true)
-        assertEquals(
-            photo12.handles, mapOf(
-                LocalStorageClient::class to UriHandle("file://fake-filesystem/photo12.jpg".toUri())
-            )
-        )
     }
 }

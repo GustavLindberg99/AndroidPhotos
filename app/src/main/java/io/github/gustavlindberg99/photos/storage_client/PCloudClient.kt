@@ -11,7 +11,8 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.media3.common.util.UnstableApi
 import com.github.gustavlindberg99.androidsuspendutils.SuspendableLauncher
-import com.github.gustavlindberg99.androidsuspendutils.flow
+import com.github.gustavlindberg99.androidsuspendutils.channelFlow
+import com.github.gustavlindberg99.androidsuspendutils.concurrentForEach
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import com.pcloud.sdk.ApiClient
 import com.pcloud.sdk.ApiError
@@ -30,9 +31,10 @@ import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.PCloudFileHandle
 import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
-import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPCloudSha1
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotoBySha1
 import io.github.gustavlindberg99.photos.data_source.HttpDataSource
+import io.github.gustavlindberg99.photos.file_handle.HandleList
+import io.github.gustavlindberg99.photos.storage_client_utils.getCachedSha1
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.defaultRequest
@@ -74,20 +76,28 @@ class PCloudClient private constructor(
         return PCloudClient::class::qualifiedName.hashCode()
     }
 
-    public override fun getAllPhotos(): Flow<Media> = flow { f ->
-        val picturesFolder = this.getPicturesFolder() ?: return@flow
+    public override fun getAllPhotos(): Flow<Media> = channelFlow { f ->
+        val picturesFolder = this.getPicturesFolder() ?: return@channelFlow
+        val existingFileNames = PhotoManager.allPhotos(this._context)
+            .filter { it.handles.pCloudHandle != null }
+            .map { it.sha1 }.toSet()
+
+        // Sort to put the file names that don't exist yet first so that we don't need to wait too long to see new photos
         val photoFiles = this.photosInFolder(picturesFolder)
-        for (file in photoFiles) {
-            val mimeType = URLConnection.guessContentTypeFromName(file.name()) ?: continue
-            val sha1 = getCachedPCloudSha1(this._context, this, file, this._apiClient)
+            .sortedBy { it.name() in existingFileNames }
+
+        photoFiles.concurrentForEach(this._context, 10) { file ->
+            val mimeType =
+                URLConnection.guessContentTypeFromName(file.name()) ?: return@concurrentForEach
+            val sha1 = file.sha1()
             val photo = getCachedPhotoBySha1(
                 this._context,
                 file.name(),
                 mimeType,
                 sha1,
-                mutableMapOf(this::class to PCloudFileHandle(file.fileId()))
-            ) ?: continue
-            f.emit(photo)
+                HandleList(pCloudHandle = PCloudFileHandle(file.fileId()))
+            ) ?: return@concurrentForEach
+            f.send(photo)
         }
     }
 
@@ -108,17 +118,14 @@ class PCloudClient private constructor(
 
         // Check if the file is already uploaded
         val existingFiles = photosInFolder(picturesFolder)
-        val existingFile = existingFiles.find {
-            it.name() == photo.fileName &&
-            getCachedPCloudSha1(this._context, this, it, this._apiClient) == photo.sha1
-        }
+        val existingFile =
+            existingFiles.find { it.name() == photo.fileName && it.sha1() == photo.sha1 }
 
         // Upload the file
         val id: Long
         if (existingFile == null) {
             val inputStream = photo.getInputStream(this._context)
-            val size = (photo.handles[LocalStorageClient::class] ?: photo.handles.values.first())
-                .getSize(this._context)
+            val size = photo.handles.preferredHandle().getSize(this._context)
 
             val dataSource = object : DataSource() {
                 public override fun contentLength() = size
@@ -132,7 +139,7 @@ class PCloudClient private constructor(
                     picturesFolder,
                     photo.fileName,
                     dataSource,
-                    photo.dateTime(),
+                    photo.dateTime,
                     { done, total -> progressListener((done * 100 / total).toInt()) }
                 ).execute()
             }
@@ -142,12 +149,12 @@ class PCloudClient private constructor(
         else {
             id = existingFile.fileId()
         }
-        photo.handles[this::class] = PCloudFileHandle(id)
+        photo.handles.pCloudHandle = PCloudFileHandle(id)
         PhotoManager.update(this._context, photo)
     }
 
     public override suspend fun overwrite(oldPhoto: Media, newBytes: ByteArray): Media {
-        val handle = oldPhoto.handles[this::class] as PCloudFileHandle
+        val handle = oldPhoto.handles.pCloudHandle ?: throw IOException("Photo is not on PCloud")
         val remoteFile = withContext(Dispatchers.IO) {
             _apiClient.loadFile(handle.id).execute()
         }
@@ -166,19 +173,19 @@ class PCloudClient private constructor(
             newFile.name(),
             oldPhoto.mimeType,
             sha1,
-            mutableMapOf(this::class to PCloudFileHandle(newFile.fileId()))
+            HandleList(pCloudHandle = PCloudFileHandle(newFile.fileId()))
         ) ?: throw IOException("Cannot read from newly created photo")
-        oldPhoto.handles.remove(this::class)
+        oldPhoto.handles.pCloudHandle = null
         PhotoManager.update(this._context, oldPhoto)
         return PhotoManager.update(this._context, newPhoto)
     }
 
     public override suspend fun delete(photo: Media) {
-        val id = photo.handles[this::class] as PCloudFileHandle
+        val id = photo.handles.pCloudHandle ?: return
         withContext(Dispatchers.IO) {
             _apiClient.deleteFile(id.id).execute()
         }
-        photo.handles.remove(this::class)
+        photo.handles.pCloudHandle
         PhotoManager.update(this._context, photo, delete = true)
     }
 
@@ -275,6 +282,26 @@ class PCloudClient private constructor(
             Log.w(this.javaClass.name, e.message, e)
             return@withContext null
         }
+    }
+
+    /**
+     * Gets the SHA1 of the given file, reading it from cache if needed. Needed because sometimes sha1Checksum is null, in which case it will be cached based on PCloud's internal hash.
+     *
+     * @return The SHA1 of the file.
+     */
+    private suspend fun RemoteFile.sha1(): String {
+        val fetchedSha1 = withContext(Dispatchers.IO) {
+            this@PCloudClient._apiClient.getChecksums(this.fileId()).execute().sha1?.hex()
+        }
+        if (fetchedSha1 != null) {
+            return fetchedSha1
+        }
+        val pCloudHash = this.hash()
+        return getCachedSha1(
+            this@PCloudClient._context,
+            pCloudHash,
+            { this@PCloudClient.getInputStream(this.fileId()) }
+        )
     }
 
     companion object : StorageClient.Companion {

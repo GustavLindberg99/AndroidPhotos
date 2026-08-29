@@ -2,10 +2,9 @@ package io.github.gustavlindberg99.photos
 
 import androidx.core.net.toUri
 import io.github.gustavlindberg99.photos.file_handle.GoogleDriveFileHandle
+import io.github.gustavlindberg99.photos.file_handle.HandleList
 import io.github.gustavlindberg99.photos.file_handle.UriHandle
 import io.github.gustavlindberg99.photos.photo.Photo
-import io.github.gustavlindberg99.photos.storage_client.GoogleDriveClient
-import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
 import org.junit.Before
 
 abstract class PhotoTestBase {
@@ -35,7 +34,7 @@ abstract class PhotoTestBase {
             "a28f27cc77d046a6ba430d7b45814799",
             "2020:01:01 10:00:00",
             "+01:00",
-            mutableMapOf(LocalStorageClient::class to UriHandle("file://fake-filesystem/photo1.jpg".toUri()))
+            HandleList(localStorageHandle = UriHandle("file://fake-filesystem/photo1.jpg".toUri()))
         )
 
         photo2 = Photo(
@@ -48,7 +47,7 @@ abstract class PhotoTestBase {
             "a28f27cc77d046a6ba430d7b45814799", // Same SHA1 as photo1
             "2020:01:01 10:00:00",
             "+01:00",
-            mutableMapOf(GoogleDriveClient::class to GoogleDriveFileHandle("id2"))
+            HandleList(googleDriveHandle = GoogleDriveFileHandle("id2"))
         )
 
         photo3 = Photo(
@@ -61,7 +60,7 @@ abstract class PhotoTestBase {
             "db8c193a59f10d390f84e75dff8dc85e",
             "2020:01:01 10:00:00",
             "+01:00",
-            mutableMapOf(GoogleDriveClient::class to GoogleDriveFileHandle("id3"))
+            HandleList(googleDriveHandle = GoogleDriveFileHandle("id3"))
         )
 
         photo4 = Photo(
@@ -74,9 +73,9 @@ abstract class PhotoTestBase {
             "e0bbe8f44ee84a953fee219201d8e11d",
             "2020:01:01 09:00:00",
             "-07:00",
-            mutableMapOf(
-                LocalStorageClient::class to UriHandle("file://fake-filesystem/photo4.jpg".toUri()),
-                GoogleDriveClient::class to GoogleDriveFileHandle("id4")
+            HandleList(
+                localStorageHandle = UriHandle("file://fake-filesystem/photo4.jpg".toUri()),
+                googleDriveHandle = GoogleDriveFileHandle("id4")
             )
         )
 
@@ -90,9 +89,9 @@ abstract class PhotoTestBase {
             "cd8be7c57b778ce54a5c0cfc2a3a866c",
             "2020:01:01 09:00:00+",
             "01:00",
-            mutableMapOf(
-                LocalStorageClient::class to UriHandle("file://fake-filesystem/photo5.jpg".toUri()),
-                GoogleDriveClient::class to GoogleDriveFileHandle("id5")
+            HandleList(
+                localStorageHandle = UriHandle("file://fake-filesystem/photo5.jpg".toUri()),
+                googleDriveHandle = GoogleDriveFileHandle("id5")
             )
         )
 
@@ -106,9 +105,9 @@ abstract class PhotoTestBase {
             "01d367fae1fb1d24e05c6c05e7c5c002",
             null,
             null,
-            mutableMapOf(
-                LocalStorageClient::class to UriHandle("file://fake-filesystem/photo6.jpg".toUri()),
-                GoogleDriveClient::class to GoogleDriveFileHandle("id6")
+            HandleList(
+                localStorageHandle = UriHandle("file://fake-filesystem/photo6.jpg".toUri()),
+                googleDriveHandle = GoogleDriveFileHandle("id6")
             )
         )
 
@@ -122,9 +121,9 @@ abstract class PhotoTestBase {
             "29b2dd541f46415a90d9909379141cc0",
             null,
             null,
-            mutableMapOf(
-                LocalStorageClient::class to UriHandle("file://fake-filesystem/photo7.jpg".toUri()),
-                GoogleDriveClient::class to GoogleDriveFileHandle("id7")
+            HandleList(
+                localStorageHandle = UriHandle("file://fake-filesystem/photo7.jpg".toUri()),
+                googleDriveHandle = GoogleDriveFileHandle("id7")
             )
         )
 
@@ -138,9 +137,9 @@ abstract class PhotoTestBase {
             "a65d608eb64ceb8df0f52daf4faba04d",
             null,
             null,
-            mutableMapOf(
-                LocalStorageClient::class to UriHandle("file://fake-filesystem/photo8.jpg".toUri()),
-                GoogleDriveClient::class to GoogleDriveFileHandle("id8")
+            HandleList(
+                localStorageHandle = UriHandle("file://fake-filesystem/photo8.jpg".toUri()),
+                googleDriveHandle = GoogleDriveFileHandle("id8")
             )
         )
 
@@ -154,9 +153,9 @@ abstract class PhotoTestBase {
             "c7ee2bddf0adcf67d0ee077e4e295436",
             null,
             null,
-            mutableMapOf(
-                LocalStorageClient::class to UriHandle("file://fake-filesystem/photo9.jpg".toUri()),
-                GoogleDriveClient::class to GoogleDriveFileHandle("id9")
+            HandleList(
+                localStorageHandle = UriHandle("file://fake-filesystem/photo9.jpg".toUri()),
+                googleDriveHandle = GoogleDriveFileHandle("id9")
             )
         )
 
@@ -170,9 +169,9 @@ abstract class PhotoTestBase {
             "2f69c8aa1168b478e09cbdf68313683d",
             null,
             null,
-            mutableMapOf(
-                LocalStorageClient::class to UriHandle("file://fake-filesystem/photo10.jpg".toUri()),
-                GoogleDriveClient::class to GoogleDriveFileHandle("id10")
+            HandleList(
+                localStorageHandle = UriHandle("file://fake-filesystem/photo10.jpg".toUri()),
+                googleDriveHandle = GoogleDriveFileHandle("id10")
             )
         )
 
@@ -186,9 +185,9 @@ abstract class PhotoTestBase {
             "66e3c472e4f521c6ad94342229b5fe95",
             null,
             null,
-            mutableMapOf(
-                LocalStorageClient::class to UriHandle("file://fake-filesystem/photo11.jpg".toUri()),
-                GoogleDriveClient::class to GoogleDriveFileHandle("id11")
+            HandleList(
+                localStorageHandle = UriHandle("file://fake-filesystem/photo11.jpg".toUri()),
+                googleDriveHandle = GoogleDriveFileHandle("id11")
             )
         )
 
@@ -202,9 +201,9 @@ abstract class PhotoTestBase {
             "8e96ac7441415b4c6b1db92e65355751",
             null,
             null,
-            mutableMapOf(
-                LocalStorageClient::class to UriHandle("file://fake-filesystem/photo12.jpg".toUri()),
-                GoogleDriveClient::class to GoogleDriveFileHandle("id12")
+            HandleList(
+                localStorageHandle = UriHandle("file://fake-filesystem/photo12.jpg".toUri()),
+                googleDriveHandle = GoogleDriveFileHandle("id12")
             )
         )
 
@@ -218,7 +217,7 @@ abstract class PhotoTestBase {
             "8e96ac7441415b4c6b1db92e65355751", // Same SHA1 as photo12
             null,
             null,
-            mutableMapOf(LocalStorageClient::class to UriHandle("file://fake-filesystem/photo13.jpg".toUri()))
+            HandleList(localStorageHandle = UriHandle("file://fake-filesystem/photo13.jpg".toUri()))
         )
     }
 }

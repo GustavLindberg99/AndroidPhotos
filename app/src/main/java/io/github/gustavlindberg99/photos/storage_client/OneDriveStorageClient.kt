@@ -11,7 +11,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import com.github.gustavlindberg99.androidsuspendutils.async
-import com.github.gustavlindberg99.androidsuspendutils.flow
+import com.github.gustavlindberg99.androidsuspendutils.channelFlow
+import com.github.gustavlindberg99.androidsuspendutils.concurrentForEach
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import com.onedrive.sdk.authentication.MSAAuthenticator
 import com.onedrive.sdk.concurrency.ChunkedUploadProvider
@@ -39,6 +40,7 @@ import io.github.gustavlindberg99.photos.storage_client_utils.PhotoManager
 import io.github.gustavlindberg99.photos.storage_client_utils.PhotosFolderManager
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedPhotoBySha1
 import io.github.gustavlindberg99.photos.data_source.HttpDataSource
+import io.github.gustavlindberg99.photos.file_handle.HandleList
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.defaultRequest
@@ -100,27 +102,34 @@ class OneDriveStorageClient private constructor(
         return OneDriveStorageClient::class::qualifiedName.hashCode()
     }
 
-    public override fun getAllPhotos(): Flow<Media> = flow { f ->
+    public override fun getAllPhotos(): Flow<Media> = channelFlow { f ->
         val request =
             if (photosFolder(this._context) == "") this.client().drive.root
             else this.client().drive.getItems(
-                this._photosFolderManager.getPhotosFolder()?.id ?: return@flow
+                this._photosFolderManager.getPhotosFolder()?.id ?: return@channelFlow
             )
+        val existingSha1s = PhotoManager.allPhotos(this._context)
+            .filter { it.handles.oneDriveHandle != null }
+            .map { it.sha1 }.toSet()
+
+        // Sort to put the SHA1s that don't exist yet first so that we don't need to wait too long to see new photos
         val allFiles = this.photosInFolder(request)
-        for (file in allFiles) {
+            .sortedBy { it.file.hashes?.sha1Hash in existingSha1s }
+
+        allFiles.concurrentForEach(this._context, 10) { file ->
             // If the sha1 hash is not present, skip. This can happen in the following cases:
             //  1. The file was recently uploaded and the server isn't done calculating its SHA1. Then we skip it for now and we will find it later instead.
             //  2. The file type doesn't support SHA1. Then it's not a photo so we would skip it anyway.
             //  3. A network error occurred and the API response is incomplete. Then again we will find it later.
-            val sha1 = file.file.hashes?.sha1Hash ?: continue
+            val sha1 = file.file.hashes?.sha1Hash ?: return@concurrentForEach
             val photo = getCachedPhotoBySha1(
                 this._context,
                 file.name,
                 file.file.mimeType,
                 sha1,
-                mutableMapOf(OneDriveStorageClient::class to OneDriveFileHandle(file.id))
-            ) ?: continue
-            f.emit(photo)
+                HandleList(oneDriveHandle = OneDriveFileHandle(file.id))
+            ) ?: return@concurrentForEach
+            f.send(photo)
         }
     }
 
@@ -150,10 +159,7 @@ class OneDriveStorageClient private constructor(
         val id: String
         if (existingFile == null) {
             val inputStream = photo.getInputStream(this._context)
-            val size =
-                (photo.handles[LocalStorageClient::class] ?: photo.handles.values.first()).getSize(
-                    this._context
-                ).toInt()
+            val size = photo.handles.preferredHandle().getSize(this._context).toInt()
 
             val uploadSession: UploadSession<Any> = awaitApiCall {
                 request.children
@@ -196,12 +202,13 @@ class OneDriveStorageClient private constructor(
         else {
             id = existingFile.id
         }
-        photo.handles[this::class] = OneDriveFileHandle(id)
+        photo.handles.oneDriveHandle = OneDriveFileHandle(id)
         PhotoManager.update(this._context, photo)
     }
 
     public override suspend fun overwrite(oldPhoto: Media, newBytes: ByteArray): Media {
-        val handle = oldPhoto.handles[this::class] as OneDriveFileHandle
+        val handle = oldPhoto.handles.oneDriveHandle
+            ?: throw IOException("Photo is not on OneDrive")
         val client = this.client()
         val newFile: Item = awaitApiCall {
             client.drive.getItems(handle.id).content.buildRequest()
@@ -213,15 +220,15 @@ class OneDriveStorageClient private constructor(
             newFile.name,
             oldPhoto.mimeType,
             sha1,
-            mutableMapOf(this::class to OneDriveFileHandle(newFile.id))
+            HandleList(oneDriveHandle = OneDriveFileHandle(newFile.id))
         ) ?: throw IOException("Cannot read from newly created photo")
-        oldPhoto.handles.remove(this::class)
+        oldPhoto.handles.oneDriveHandle = null
         PhotoManager.update(this._context, oldPhoto)
         return PhotoManager.update(this._context, newPhoto)
     }
 
     public override suspend fun delete(photo: Media) {
-        val handle = photo.handles[this::class] as OneDriveFileHandle
+        val handle = photo.handles.oneDriveHandle ?: return
         val client = this.client()
         try {
             awaitApiCall<Void> {
@@ -235,7 +242,7 @@ class OneDriveStorageClient private constructor(
                 throw e
             }
         }
-        photo.handles.remove(this::class)
+        photo.handles.oneDriveHandle = null
         PhotoManager.update(this._context, photo, delete = true)
     }
 

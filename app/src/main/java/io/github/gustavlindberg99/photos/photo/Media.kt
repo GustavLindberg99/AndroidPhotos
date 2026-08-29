@@ -8,30 +8,18 @@ import android.location.Geocoder
 import android.util.Log
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.graphics.drawable.toBitmap
-import androidx.core.net.toUri
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
-import io.github.gustavlindberg99.photos.file_handle.FileHandle
-import io.github.gustavlindberg99.photos.file_handle.GoogleDriveFileHandle
-import io.github.gustavlindberg99.photos.file_handle.OneDriveFileHandle
-import io.github.gustavlindberg99.photos.file_handle.PCloudFileHandle
-import io.github.gustavlindberg99.photos.file_handle.UriHandle
-import io.github.gustavlindberg99.photos.storage_client.GoogleDriveClient
-import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
-import io.github.gustavlindberg99.photos.storage_client.OneDriveStorageClient
-import io.github.gustavlindberg99.photos.storage_client.PCloudClient
-import io.github.gustavlindberg99.photos.storage_client.StorageClient
+import io.github.gustavlindberg99.photos.file_handle.HandleList
 import io.github.gustavlindberg99.photos.storage_client_utils.getCachedThumbnailBySha1
 import io.github.gustavlindberg99.photos.utils.readThumbnailBitmapFromInputStream
-import io.github.gustavlindberg99.photos.utils.toStringMap
 import kotlinx.coroutines.Dispatchers
 import org.json.JSONObject
 import org.osmdroid.util.GeoPoint
 import java.io.IOException
 import java.io.InputStream
 import java.util.Date
-import kotlin.reflect.KClass
 import kotlin.text.trim
 
 /**
@@ -52,7 +40,7 @@ abstract sealed class Media(
     private val _rotation: Int,
     public val location: GeoPoint?,
     public val sha1: String,
-    public val handles: MutableMap<KClass<out StorageClient>, FileHandle>
+    public val handles: HandleList
 ) : Comparable<Media> {
     public override fun equals(other: Any?): Boolean {
         return other is Media && this.sha1 == other.sha1
@@ -71,7 +59,7 @@ abstract sealed class Media(
      *
      * @return The date and time the photo was taken, or null if this information is unavailable.
      */
-    public abstract fun dateTime(): Date?
+    public abstract val dateTime: Date?
 
     /**
      * Creates an edited version of this photo. Does not modify this object itself.
@@ -94,8 +82,8 @@ abstract sealed class Media(
      * Compares this photo with another photo, so that photos that are shown first in the list (i.e. more recent) are considered smaller.
      */
     public override fun compareTo(other: Media): Int {
-        val thisDateTime = this.dateTime()
-        val otherDateTime = other.dateTime()
+        val thisDateTime = this.dateTime
+        val otherDateTime = other.dateTime
         val dateTimeResult =
             if (thisDateTime == null && otherDateTime == null) 0
             else if (thisDateTime == null) -1
@@ -117,8 +105,7 @@ abstract sealed class Media(
      * @throws NoSuchElementException If the photo has been deleted from all storage services.
      */
     public suspend fun getInputStream(context: StorageManagerActivity): InputStream {
-        val handle = this.handles[LocalStorageClient::class] ?: this.handles.values.first()
-        return handle.getInputStream(context)
+        return this.handles.preferredHandle().getInputStream(context)
     }
 
     /**
@@ -131,7 +118,7 @@ abstract sealed class Media(
     public suspend fun getThumbnail(context: StorageManagerActivity): Bitmap {
         val errorDrawable =
             AppCompatResources.getDrawable(context, R.drawable.baseline_warning_24)!!.toBitmap()
-        val handle = this.handles[LocalStorageClient::class] ?: this.handles.values.first()
+        val handle = this.handles.preferredHandle()
         val uri = getCachedThumbnailBySha1(
             context,
             this.sha1,
@@ -178,20 +165,6 @@ abstract sealed class Media(
     }
 
     /**
-     * If the other photo has handles with storage services that this photo doesn't have, copies those handles into this Photo object.
-     *
-     * @param other The photo to get the handles from.
-     */
-    public fun mergeHandlesWith(other: Media, delete: Boolean) {
-        if (delete) {
-            this.handles.keys.removeAll { it !in other.handles }
-        }
-        else {
-            this.handles.putAll(other.handles)
-        }
-    }
-
-    /**
      * Creates a JSON object representing this photo.
      *
      * @return The JSON object.
@@ -208,10 +181,7 @@ abstract sealed class Media(
                 put(LONGITUDE, location.longitude)
             }
             put(SHA1_CHECKSUM, sha1)
-            val handles = this@Media.handles
-                .mapKeys { it.key.qualifiedName!! }
-                .mapValues { it.value.toString() }
-            put(URIS, JSONObject(handles))
+            put(URIS, handles.toJson())
         }
     }
 
@@ -250,17 +220,7 @@ abstract sealed class Media(
                     GeoPoint(json.getDouble(LATITUDE), json.getDouble(LONGITUDE))
                 else null
             val sha1 = json.getString(SHA1_CHECKSUM)
-            val handles = json.getJSONObject(URIS).toStringMap()
-                .mapKeys { Class.forName(it.key).asSubclass(StorageClient::class.java).kotlin }
-                .mapValues {
-                    when (it.key) {
-                        LocalStorageClient::class -> UriHandle(it.value.toUri())
-                        GoogleDriveClient::class -> GoogleDriveFileHandle(it.value)
-                        OneDriveStorageClient::class -> OneDriveFileHandle(it.value)
-                        PCloudClient::class -> PCloudFileHandle(it.value.toLong())
-                        else -> throw ClassNotFoundException(it.key.qualifiedName)
-                    }
-                }
+            val handles = HandleList.fromJson(json.getJSONObject(URIS))
             val dateTime =
                 if (json.has(DATE_TIME)) json.getString(DATE_TIME)
                 else null
@@ -281,7 +241,7 @@ abstract sealed class Media(
                     location,
                     sha1,
                     dateTime,
-                    handles.toMutableMap()
+                    handles
                 )
             }
             else {
@@ -295,7 +255,7 @@ abstract sealed class Media(
                     sha1,
                     dateTime,
                     timezone,
-                    handles.toMutableMap()
+                    handles
                 )
             }
         }

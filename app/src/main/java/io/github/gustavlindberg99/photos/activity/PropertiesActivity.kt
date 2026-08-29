@@ -32,7 +32,6 @@ import com.github.gustavlindberg99.androidsuspendutils.useWithContext
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.checkbox.MaterialCheckBox
 import io.github.gustavlindberg99.photos.R
-import io.github.gustavlindberg99.photos.file_handle.UriHandle
 import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.photo.Photo
 import io.github.gustavlindberg99.photos.photo.Video
@@ -312,8 +311,8 @@ abstract class PropertiesActivity : StorageManagerActivity() {
 
         // Update date
         // Reverse min and max because the Media class considers photos with a later date to be first, since that's the order they're shown in
-        val minDate = this._selectedPhotos.max().dateTime()
-        val maxDate = this._selectedPhotos.min().dateTime()
+        val minDate = this._selectedPhotos.max().dateTime
+        val maxDate = this._selectedPhotos.min().dateTime
         if (minDate == maxDate) {
             this._dateTimeRow.text = this.getString(R.string.date, minDate.toString())
         }
@@ -429,10 +428,10 @@ abstract class PropertiesActivity : StorageManagerActivity() {
      */
     private fun updateCheckboxStates() {
         for ((client, checkbox) in this._storageCheckboxes) {
-            if (this._selectedPhotos.all { client::class in it.handles }) {
+            if (this._selectedPhotos.all { it.handles.getHandle(client::class) != null }) {
                 checkbox.checkedState = MaterialCheckBox.STATE_CHECKED
             }
-            else if (this._selectedPhotos.all { client::class !in it.handles }) {
+            else if (this._selectedPhotos.all { it.handles.getHandle(client::class) == null }) {
                 checkbox.checkedState = MaterialCheckBox.STATE_UNCHECKED
             }
             else {
@@ -507,8 +506,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         val photos = this._selectedPhotos.toSet()
 
         // If deleting the photo from the last storage client, show a confirmation dialog
-        val clientClasses = clients.map { it::class }
-        if (photos.any { clientClasses.containsAll(it.handles.keys) }) {
+        if (photos.any { photo -> photo.handles.isLastHandle(clients.map { it::class }) }) {
             val proceed = AlertDialog.Builder(this)
                 .setTitle(R.string.delete)
                 .setMessage(R.string.deleteConfirmation)
@@ -525,14 +523,12 @@ abstract class PropertiesActivity : StorageManagerActivity() {
                 for (client in clients) {
                     photos.concurrentForEach(UploadManager) { photo ->
                         if (upload) {
-                            if (client::class !in photo.handles) {
+                            if (photo.handles.getHandle(client::class) == null) {
                                 UploadManager.save(client, photo)
                             }
                         }
                         else {
-                            if (client::class in photo.handles) {
-                                client.delete(photo)
-                            }
+                            client.delete(photo)
                         }
                     }
                 }
@@ -570,7 +566,7 @@ abstract class PropertiesActivity : StorageManagerActivity() {
         try {
             val sharedPhotosDir by lazy { this.sharedPhotosDir() }
             val uris: List<Uri> = photos.map { photo ->
-                val localHandle = photo.handles[LocalStorageClient::class] as? UriHandle
+                val localHandle = photo.handles.localStorageHandle
                 if (localHandle != null) {
                     // Use existing local URI if possible
                     return@map localHandle.uri()
@@ -676,7 +672,8 @@ abstract class PropertiesActivity : StorageManagerActivity() {
                     }
 
                     // Upload the photo
-                    val clients = this.storageClients().filter { it::class in photo.handles }
+                    val clients =
+                        this.storageClients().filter { photo.handles.getHandle(it::class) != null }
                     clients.concurrentForEach(UploadManager) { client ->
                         val newPhoto = UploadManager.overwrite(client, photo, newBytes)
                         this.togglePhotoSelected(newPhoto, updateUi = false)

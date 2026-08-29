@@ -6,8 +6,6 @@ import android.net.Uri
 import android.util.Log
 import androidx.core.net.toUri
 import com.github.gustavlindberg99.androidsuspendutils.useWithContext
-import com.pcloud.sdk.ApiClient
-import com.pcloud.sdk.RemoteFile
 import io.github.gustavlindberg99.photos.BuildConfig
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
 import io.github.gustavlindberg99.photos.file_handle.FileHandle
@@ -18,10 +16,8 @@ import io.github.gustavlindberg99.photos.metadata_parser.VideoMetadataParser
 import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.photo.Photo
 import io.github.gustavlindberg99.photos.photo.Video
-import io.github.gustavlindberg99.photos.storage_client.LocalStorageClient
-import io.github.gustavlindberg99.photos.storage_client.PCloudClient
-import io.github.gustavlindberg99.photos.storage_client.StorageClient
 import io.github.gustavlindberg99.photos.data_source.FileHandleMediaDataSource
+import io.github.gustavlindberg99.photos.file_handle.HandleList
 import io.github.gustavlindberg99.photos.utils.readThumbnailBitmapFromInputStream
 import io.github.gustavlindberg99.photos.utils.rotate
 import io.github.gustavlindberg99.photos.utils.toJsonObjectList
@@ -36,9 +32,9 @@ import org.json.JSONException
 import org.json.JSONObject
 import org.osmdroid.util.GeoPoint
 import java.io.IOException
+import java.io.InputStream
 import java.util.SortedSet
 import kotlin.apply
-import kotlin.reflect.KClass
 
 private const val VERSION = "version"
 private const val DATA = "data"
@@ -110,12 +106,8 @@ public suspend fun getCachedPhotoBySha1(
     fileName: String,
     mimeType: String,
     sha1: String,
-    handles: MutableMap<KClass<out StorageClient>, FileHandle>
+    handles: HandleList
 ): Media? {
-    val clients = context.storageClients().filter { it::class in handles }
-    val mainClient = clients.firstOrNull { it is LocalStorageClient } ?: clients.first()
-    val mainHandle = handles[mainClient::class]!!
-
     val metadataFile = context.cacheDir.resolve("$METADATA_DIR/$sha1.json")
 
     if (metadataFile.exists()) {
@@ -184,6 +176,7 @@ public suspend fun getCachedPhotoBySha1(
 
     // Extract EXIF data
     val isVideo = mimeType.startsWith("video/")
+    val mainHandle = handles.preferredHandle()
     val metadataParser = try {
         if (mainHandle is UriHandle && mainHandle.isLocal()) {
             // For local files, reading from the file descriptor is the most efficient way, but the file descriptor can't be closed while the ExifInterface object is still in use.
@@ -287,42 +280,26 @@ public suspend fun getCachedPhotoBySha1(
  * Gets the SHA1 of the given photo, and caches it if it isn't already cached. The cache is needed because otherwise an HTTP request would be needed to get the SHA1 of the photo. Usually a cheap HTTP request if the server can produce the SHA1 directly, but that can still be expensive if we need the SHA1s of many photos at once.
  *
  * @param context       The context of the application.
- * @param pCloudClient  The PCloud client to use.
- * @param file          The file to get the SHA1 of.
- * @param apiClient     The PCloud API client to use.
+ * @param key           The key to use for the cache, often a non-SHA1 hash.
+ * @param inputStream   A lambda returning an input stream for the photo. Needs to be a lambda so that the input stream doesn't get opened if the SHA1 is already cached.
  *
  * @return The SHA1 of the given photo.
  */
-public suspend fun getCachedPCloudSha1(
+public suspend fun getCachedSha1(
     context: Context,
-    pCloudClient: PCloudClient,
-    file: RemoteFile,
-    apiClient: ApiClient
+    key: String,
+    inputStream: suspend () -> InputStream
 ): String {
-    val pCloudHash = file.hash()
-    val cacheFile = context.cacheDir.resolve("$METADATA_DIR/$pCloudHash.json")
+    val cacheFile = context.cacheDir.resolve("$METADATA_DIR/$key.json")
     if (cacheFile.exists()) {
         // If the SHA1 is already cached, return it
         return cacheFile.readText(Charsets.UTF_8)
     }
     else {
-        val fetchedSha1 = withContext(Dispatchers.IO) {
-            apiClient.getChecksums(file.fileId()).execute().sha1?.hex()
-        }
-        val sha1: String
-
-        if (fetchedSha1 != null) {
-            // If the SHA1 can be calculated server side, use that instead of downloading the entire photo
-            return fetchedSha1
-        }
-        else {
-            // If the SHA1 can't be calculated server side, download the entire photo and calculate the SHA1 ourselves
-            val sha1Sink = HashingSink.sha1(blackholeSink())
-            pCloudClient
-                .getInputStream(file.fileId())
-                .useWithContext(Dispatchers.IO) { it.source().buffer().readAll(sha1Sink) }
-            sha1 = sha1Sink.hash.hex()
-        }
+        // If the SHA1 can't be calculated server side, download the entire photo and calculate the SHA1 ourselves
+        val sha1Sink = HashingSink.sha1(blackholeSink())
+        inputStream().useWithContext(Dispatchers.IO) { it.source().buffer().readAll(sha1Sink) }
+        val sha1 = sha1Sink.hash.hex()
 
         // Cache the SHA1 and return it
         cacheFile.writeText(sha1, Charsets.UTF_8)

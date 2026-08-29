@@ -12,24 +12,22 @@ import com.github.gustavlindberg99.androidsuspendutils.launch
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import io.github.gustavlindberg99.photos.photo.Media
 import io.github.gustavlindberg99.photos.storage_client.StorageClient
-import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Semaphore
 import kotlin.collections.mutableSetOf
-import kotlin.coroutines.resume
 import kotlin.reflect.KClass
 import kotlin.reflect.full.companionObjectInstance
 
 object UploadManager : LifecycleOwner {
     // LinkedHashSet preserves both insertion order and uniqueness of elements
-    private val _queuedUploads =
-        mutableMapOf<KClass<out StorageClient>, LinkedHashMap<Media, MutableSet<CancellableContinuation<Unit>>>>()
+    private val _queuedUploads = mutableMapOf<KClass<out StorageClient>, MutableSet<Media>>()
     private val _currentUploads =
         mutableMapOf<KClass<out StorageClient>, MutableMap<Media, Deferred<Media>>>()
     private val _failedUploads = mutableMapOf<KClass<out StorageClient>, MutableSet<Media>>()
 
     private val _stateChangedListeners = mutableSetOf<(Media, StorageClient, Int) -> Unit>()
+    private val _semaphore = Semaphore(MAX_SIMULTANEOUS_UPLOADS)
 
     public override val lifecycle = LifecycleRegistry(this)
 
@@ -101,28 +99,9 @@ object UploadManager : LifecycleOwner {
         photo: Media,
         action: suspend () -> Media
     ): Media {
-        val currentUploads = this._currentUploads[client::class] ?: mutableMapOf()
-        this._currentUploads[client::class] = currentUploads
-        val pendingUploads = this._queuedUploads[client::class] ?: LinkedHashMap()
-        this._queuedUploads[client::class] = pendingUploads
-        val failedUploads = this._failedUploads[client::class] ?: mutableSetOf()
-        this._failedUploads[client::class] = failedUploads
-        failedUploads.remove(photo)
-
-        // Queue the photo if there are too many uploads already
-        if (currentUploads.size >= MAX_SIMULTANEOUS_UPLOADS) {
-            suspendCancellableCoroutine {
-                val callListeners = photo !in pendingUploads
-                val continuations = pendingUploads[photo] ?: mutableSetOf()
-                pendingUploads[photo] = continuations
-                continuations.add(it)
-                if (callListeners) {
-                    UploadManager.lifecycleScope.launch {
-                        this.notifyListeners(photo, client, QUEUED)
-                    }
-                }
-            }
-        }
+        val currentUploads = this._currentUploads.getOrPut(client::class, { mutableMapOf() })
+        val pendingUploads = this._queuedUploads.getOrPut(client::class, { mutableSetOf() })
+        val failedUploads = this._failedUploads.getOrPut(client::class, { mutableSetOf() })
 
         // If the photo is already being uploaded, just wait for the existing upload to finish
         val existingPromise = currentUploads[photo]
@@ -131,9 +110,19 @@ object UploadManager : LifecycleOwner {
         }
 
         // Upload the photo
-        val promise = this.lifecycleScope.async { action() }
+        val promise = this.lifecycleScope.async {
+            // Queue the photo if there are too many uploads already
+            failedUploads.remove(photo)
+            pendingUploads.add(photo)
+            this.notifyListeners(photo, client, QUEUED)
+            this._semaphore.acquire()    // Waits until there is room in the queue
+            pendingUploads.remove(photo)
+            this.notifyListeners(photo, client, UPLOADING)
+
+            // Run the action when there is room in the queue
+            action()
+        }
         currentUploads[photo] = promise
-        this.notifyListeners(photo, client, UPLOADING)
         try {
             return promise.await()
         }
@@ -146,15 +135,7 @@ object UploadManager : LifecycleOwner {
             @Suppress("DeferredResultUnused")
             currentUploads.remove(photo)
             this.notifyListeners(photo, client, FINISHED)
-
-            // Upload the next photo in the queue
-            if (!pendingUploads.isEmpty()) {
-                val (nextPhoto, continuations) = pendingUploads.iterator().next()
-                pendingUploads.remove(nextPhoto)
-                for (continuation in continuations) {
-                    continuation.resume(Unit)
-                }
-            }
+            this._semaphore.release()
         }
     }
 
@@ -164,7 +145,7 @@ object UploadManager : LifecycleOwner {
      * @param client    The client to get the photos for.
      */
     public fun queuedUploads(client: StorageClient): Set<Media> {
-        return this._queuedUploads[client::class]?.keys ?: emptySet()
+        return this._queuedUploads[client::class] ?: emptySet()
     }
 
     /**
@@ -173,7 +154,8 @@ object UploadManager : LifecycleOwner {
      * @param client    The client to get the photos for.
      */
     public fun currentUploads(client: StorageClient): Set<Media> {
-        return this._currentUploads[client::class]?.keys ?: emptySet()
+        return this._currentUploads[client::class]?.keys?.subtract(this.queuedUploads(client))
+            ?: emptySet()
     }
 
     /**
@@ -193,7 +175,7 @@ object UploadManager : LifecycleOwner {
      * @return True if the photo is queued, false otherwise.
      */
     public fun isQueued(photo: Media): Boolean {
-        return this._queuedUploads.values.any { it.containsKey(photo) }
+        return this._queuedUploads.values.any { photo in it }
     }
 
     /**
@@ -204,7 +186,7 @@ object UploadManager : LifecycleOwner {
      * @return True if the photo is being uploaded, false otherwise.
      */
     public fun isUploading(photo: Media): Boolean {
-        return this._currentUploads.values.any { it.containsKey(photo) }
+        return this._currentUploads.values.any { it.containsKey(photo) } && !this.isQueued(photo)
     }
 
     /**

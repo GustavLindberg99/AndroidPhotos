@@ -17,3 +17,14 @@ public inline fun <reified T> Collection<*>.asTypeOrNull(): List<T>? {
     }
     return result
 }
+
+/**
+ * Creates a map from the given pairs, ignoring `null` values.
+ *
+ * @param pairs The pairs to create the map from.
+ *
+ * @return The created map.
+ */
+public fun <K, V> mapOfNotNull(vararg pairs: Pair<K, V?>): Map<K, V> {
+    return pairs.mapNotNull { (key, value) -> value?.let { key to it } }.toMap()
+}

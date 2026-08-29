@@ -158,8 +158,14 @@ class MainActivity : PropertiesActivity() {
     }
 
     public override fun deselectAllPhotos() {
+        val previouslySelectedPhotos = this.selectedPhotos().toList()
         super.deselectAllPhotos()
-        _photoAdapter.notifyItemRangeChanged(0, this._photosInLayout.size)
+        for (photo in previouslySelectedPhotos) {
+            val index = this._photosInLayout.indexOf(photo)
+            if (index != -1) {
+                this._photoAdapter.notifyItemChanged(index)
+            }
+        }
     }
 
     /**

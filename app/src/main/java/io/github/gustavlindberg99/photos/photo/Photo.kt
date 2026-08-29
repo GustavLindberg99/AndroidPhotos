@@ -11,8 +11,7 @@ import com.github.gustavlindberg99.androidsuspendutils.useWithContext
 import com.github.gustavlindberg99.androidsuspendutils.withContext
 import io.github.gustavlindberg99.photos.R
 import io.github.gustavlindberg99.photos.activity.StorageManagerActivity
-import io.github.gustavlindberg99.photos.file_handle.FileHandle
-import io.github.gustavlindberg99.photos.storage_client.StorageClient
+import io.github.gustavlindberg99.photos.file_handle.HandleList
 import io.github.gustavlindberg99.photos.utils.rotate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +23,6 @@ import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.reflect.KClass
 
 /**
  * Class representing a photo.
@@ -48,24 +46,24 @@ class Photo(
     sha1: String,
     private val _dateTime: String?,
     public val timezone: String?,
-    handles: MutableMap<KClass<out StorageClient>, FileHandle>
+    handles: HandleList
 ) : Media(fileName, mimeType, width, height, rotation, location, sha1, handles) {
-    public override fun dateTime(): Date? {
+    public override val dateTime: Date? by lazy {
         if (this._dateTime == null) {
-            return null
+            return@lazy null
         }
         else try {
             if (this.timezone != null) {
-                return SimpleDateFormat("yyyy:MM:dd HH:mm:ssXXX", Locale.US)
+                return@lazy SimpleDateFormat("yyyy:MM:dd HH:mm:ssXXX", Locale.US)
                     .parse(this._dateTime + this.timezone)
             }
             else {
-                return SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US)
+                return@lazy SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US)
                     .parse(this._dateTime)
             }
         }
         catch (_: ParseException) {
-            return null
+            return@lazy null
         }
     }
 
